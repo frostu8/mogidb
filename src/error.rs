@@ -18,6 +18,7 @@ use mogidb_model::error::ApiError;
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
+    message: Option<String>,
 }
 
 impl Error {
@@ -28,6 +29,7 @@ impl Error {
     {
         Error {
             kind: ErrorKind::Other(eyre::Error::new(error)),
+            message: None,
         }
     }
 
@@ -36,8 +38,52 @@ impl Error {
         matches!(self.kind, ErrorKind::Other(_))
     }
 
+    /// Creates a not found error.
+    pub fn not_found<T>(msg: T) -> Error
+    where
+        T: Display,
+    {
+        Error::from(ErrorKind::NotFound).message(msg)
+    }
+
+    /// Creates an exists error.
+    pub fn exists<T>(msg: T) -> Error
+    where
+        T: Display,
+    {
+        Error::from(ErrorKind::Exists).message(msg)
+    }
+
+    pub fn message<T>(self, msg: T) -> Error
+    where
+        T: Display,
+    {
+        Error {
+            message: Some(msg.to_string()),
+            ..self
+        }
+    }
+
     fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
-        let (status, error) = match self.kind {
+        let (status, mut error) = match self.kind {
+            ErrorKind::InvalidValue(err) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: err.to_string(),
+                },
+            ),
+            ErrorKind::NotFound => (
+                StatusCode::NOT_FOUND,
+                ApiError {
+                    message: "Resource does not exist".into(),
+                },
+            ),
+            ErrorKind::Exists => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: "A resource with that id already exists".into(),
+                },
+            ),
             _err => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiError {
@@ -45,6 +91,10 @@ impl Error {
                 },
             ),
         };
+
+        if let Some(message) = self.message {
+            error.message = message;
+        }
 
         (status, error)
     }
@@ -59,7 +109,9 @@ impl Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match &self.kind {
+            ErrorKind::InvalidValue(err) => Some(err),
             ErrorKind::Other(err) => err.source(),
+            _ => None,
         }
     }
 }
@@ -69,13 +121,23 @@ where
     T: Into<ErrorKind>,
 {
     fn from(value: T) -> Self {
-        Error { kind: value.into() }
+        Error {
+            kind: value.into(),
+            message: None,
+        }
     }
 }
 
 /// An error kind.
 #[derive(Debug, Display, From)]
 pub enum ErrorKind {
+    /// An invalid value was given.
+    #[display("{_0}")]
+    InvalidValue(garde::Report),
+    /// A resource was not found.
+    NotFound,
+    /// A resource with that identifier already exists.
+    Exists,
     /// Some other internal error.
     #[from(ignore)]
     Other(eyre::Error),
@@ -86,7 +148,10 @@ impl IntoResponse for Error {
         let mut internal_error = None;
 
         let (status, error) = if self.is_internal() {
-            internal_error = Some(Error { kind: self.kind });
+            internal_error = Some(Error {
+                kind: self.kind,
+                message: self.message,
+            });
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiError {

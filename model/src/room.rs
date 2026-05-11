@@ -1,5 +1,6 @@
 //! Mogi rooms.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::event::FormatSelectionMode;
@@ -9,6 +10,8 @@ use crate::event::FormatSelectionMode;
 pub struct Room {
     #[serde(flatten)]
     pub settings: RoomSettings,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Room configuration.
@@ -31,4 +34,17 @@ pub struct RoomSettings {
     /// The amount of time before the bot drops someone for inactivity, in
     /// seconds.
     pub inactivity_drop_after: i32,
+}
+
+impl Default for RoomSettings {
+    fn default() -> RoomSettings {
+        RoomSettings {
+            players_required: 8,
+            format_selection_mode: FormatSelectionMode::Vote,
+            votes_required: 4,
+            decay_after: 3000,
+            inactivity_warning_after: 1500,
+            inactivity_drop_after: 2100,
+        }
+    }
 }
