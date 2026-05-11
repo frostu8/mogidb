@@ -1,0 +1,4 @@
+/target
+/dev_mogidb.sqlite
+/dev_mogidb.sqlite-shm
+/dev_mogidb.sqlite-wal

@@ -1,0 +1,28 @@
+[package]
+name = "mogidb"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros"] }
+axum-valid = { version = "0.24", default-features = false, features = ["garde", "basic"] }
+derive_more = { workspace = true, features = ["deref", "display", "from"] }
+dotenv = "0.15.0"
+eyre = "0.6.12"
+figment = { version = "0.10.19", features = ["env", "toml"] }
+serde = { workspace = true }
+mogidb-model = { workspace = true }
+tokio = { version = "1.52.3", features = ["macros", "rt", "rt-multi-thread"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+garde = { version = "0.22", features = ["derive"] }
+
+[workspace]
+resolver = "3"
+members = ["model"]
+
+[workspace.dependencies]
+derive_more = "2"
+mogidb-model = { path = "./model" }
+serde = { version = "1", features = ["derive"] }
+serde_repr = "0.1"
