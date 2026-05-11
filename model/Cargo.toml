@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bitflags = { workspace = true, features = ["serde"] }
 num_enum = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }

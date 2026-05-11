@@ -1114,6 +1114,7 @@ dependencies = [
 name = "mogidb-model"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "chrono",
  "derive_more",
  "num_enum",

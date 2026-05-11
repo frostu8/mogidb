@@ -25,6 +25,7 @@ resolver = "3"
 members = ["model"]
 
 [workspace.dependencies]
+bitflags = "2"
 num_enum = "0.7"
 chrono = "0.4"
 derive_more = "2"

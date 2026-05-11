@@ -8,6 +8,7 @@ use crate::event::FormatSelectionMode;
 /// A single mogi room.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Room {
+    pub enabled: bool,
     #[serde(flatten)]
     pub settings: RoomSettings,
     pub created_at: DateTime<Utc>,

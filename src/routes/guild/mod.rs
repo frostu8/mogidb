@@ -1,5 +1,7 @@
 //! Application routes for the guild.
 
+pub mod server;
+
 use axum::extract::{Path, State};
 
 use chrono::{DateTime, Utc};
@@ -10,9 +12,10 @@ use mogidb_model::{event::FormatSelectionMode, guild::Guild, room::RoomSettings}
 use serde::Deserialize;
 use sqlx::FromRow;
 
-use crate::{AppState, error::Error, json::Json, validate::Garde};
+use crate::{AppState, error::Error, json::Json, validate::Valid};
 
-#[derive(Default, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate)]
+#[garde(context(AppState as state))]
 pub struct CreateGuildRequest {
     #[garde(skip)]
     pub guild_id: i64,
@@ -21,7 +24,8 @@ pub struct CreateGuildRequest {
     pub settings: UpdateGuildRequest,
 }
 
-#[derive(Default, Deserialize, Validate)]
+#[derive(Default, Debug, Deserialize, Validate)]
+#[garde(context(AppState as state))]
 #[serde(default)]
 pub struct UpdateGuildRequest {
     #[garde(range(min = 1))]
@@ -59,7 +63,7 @@ impl UpdateGuildRequest {
 }
 
 #[derive(FromRow)]
-pub struct GuildQuery {
+struct GuildQuery {
     pub players_required: i32,
     #[sqlx(try_from = "u8")]
     pub format_selection_mode: FormatSelectionMode,
@@ -71,8 +75,8 @@ pub struct GuildQuery {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<GuildQuery> for RoomSettings {
-    fn from(value: GuildQuery) -> Self {
+impl From<&GuildQuery> for RoomSettings {
+    fn from(value: &GuildQuery) -> Self {
         RoomSettings {
             players_required: value.players_required,
             format_selection_mode: value.format_selection_mode,
@@ -85,9 +89,10 @@ impl From<GuildQuery> for RoomSettings {
 }
 
 /// Creates a new guild.
+#[axum::debug_handler]
 pub async fn create(
     State(state): State<AppState>,
-    Json(Garde(request)): Json<Garde<CreateGuildRequest>>,
+    Valid(Json(request)): Valid<Json<CreateGuildRequest>>,
 ) -> Result<Json<Guild>, Error> {
     let now = Utc::now();
 
@@ -154,11 +159,77 @@ pub async fn show(
         Some(row) => Ok(Json(Guild {
             created_at: row.inserted_at,
             updated_at: row.updated_at,
-            default_settings: row.into(),
+            default_settings: (&row).into(),
         })),
-        None => Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        ))),
+        None => Err(not_found(guild_id)),
     }
+}
+
+/// Updates guild details.
+pub async fn update(
+    Path((guild_id,)): Path<(i64,)>,
+    State(state): State<AppState>,
+    Valid(Json(request)): Valid<Json<UpdateGuildRequest>>,
+) -> Result<Json<Guild>, Error> {
+    let now = Utc::now();
+
+    let mut tx = state.db.begin().await.map_err(Error::new)?;
+
+    // Fetch the guild
+    let res = sqlx::query_as::<_, GuildQuery>(
+        r#"
+        SELECT *
+        FROM guild
+        WHERE id = $1
+        "#,
+    )
+    .bind(guild_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(Error::new)?;
+
+    let Some(row) = res else {
+        return Err(not_found(guild_id));
+    };
+
+    // Get guild room settings
+    let settings = RoomSettings::from(&row);
+    let new_settings = request.merge(settings);
+
+    // Set guild settings
+    sqlx::query(
+        r#"
+        UPDATE guild
+        SET
+            players_required = $3,
+            format_selection_mode = $4,
+            votes_required = $5,
+            decay_after = $6,
+            inactivity_warning_after = $7,
+            inactivity_drop_after = $8,
+            updated_at = $2
+        WHERE id = $1
+        "#,
+    )
+    .bind(guild_id)
+    .bind(now)
+    .bind(new_settings.players_required)
+    .bind(u8::from(new_settings.format_selection_mode))
+    .bind(new_settings.votes_required)
+    .bind(new_settings.decay_after)
+    .bind(new_settings.inactivity_warning_after)
+    .bind(new_settings.inactivity_drop_after)
+    .execute(&mut *tx)
+    .await
+    .map_err(Error::new)?;
+
+    Ok(Json(Guild {
+        created_at: row.inserted_at,
+        updated_at: now,
+        default_settings: new_settings,
+    }))
+}
+
+fn not_found(guild_id: i64) -> Error {
+    Error::not_found(format_args!("guild {} not found", guild_id,))
 }

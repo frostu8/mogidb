@@ -54,9 +54,14 @@ CREATE TABLE server (
     -- The address of the server
     remote VARCHAR(255) NOT NULL,
     -- The label
-    label VARCHAR(255),
+    label VARCHAR(255) NOT NULL,
     -- A user-defined note
     note VARCHAR(255),
+    -- Cached information about the last knock, to prevent pelting of the
+    -- server.
+    cached_info TEXT,
+    -- When the server was last knocked.
+    knocked_at TIMESTAMP,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
 

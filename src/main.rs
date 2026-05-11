@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, patch, post},
 };
 use mogidb::{AppState, config::read_config};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
@@ -23,6 +23,7 @@ async fn main() -> eyre::Result<()> {
     let app = Router::new()
         .route("/guilds", post(mogidb::routes::guild::create))
         .route("/guilds/{guild_id}", get(mogidb::routes::guild::show))
+        .route("/guilds/{guild_id}", patch(mogidb::routes::guild::update))
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8000")

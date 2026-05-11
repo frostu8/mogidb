@@ -8,6 +8,7 @@ use std::{
 
 use axum::{
     Json,
+    extract::rejection::JsonRejection,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -67,6 +68,12 @@ impl Error {
     fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
         let (status, mut error) = match self.kind {
             ErrorKind::InvalidValue(err) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: err.to_string(),
+                },
+            ),
+            ErrorKind::Json(err) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: err.to_string(),
@@ -134,6 +141,9 @@ pub enum ErrorKind {
     /// An invalid value was given.
     #[display("{_0}")]
     InvalidValue(garde::Report),
+    /// A JSON rejection.
+    #[display("{_0}")]
+    Json(JsonRejection),
     /// A resource was not found.
     NotFound,
     /// A resource with that identifier already exists.

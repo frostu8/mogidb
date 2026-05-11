@@ -14,9 +14,9 @@ use crate::error::{Error, ErrorKind};
 
 /// Garde extrarctor.
 #[derive(Deref)]
-pub struct Garde<T>(pub T);
+pub struct Valid<T>(pub T);
 
-impl<S, T> FromRequestParts<S> for Garde<T>
+impl<S, T> FromRequestParts<S> for Valid<T>
 where
     S: Send + Sync,
     T: FromRequestParts<S> + HasValidate + 'static,
@@ -32,14 +32,14 @@ where
             .await;
 
         match valid {
-            Ok(axum_valid::Garde(valid)) => Ok(Garde(valid)),
+            Ok(axum_valid::Garde(valid)) => Ok(Valid(valid)),
             Err(GardeRejection::Valid(garde)) => Err(ErrorKind::InvalidValue(garde).into()),
             Err(GardeRejection::Inner(err)) => Err(err.into()),
         }
     }
 }
 
-impl<S, T> FromRequest<S> for Garde<T>
+impl<S, T> FromRequest<S> for Valid<T>
 where
     S: Send + Sync,
     T: FromRequest<S> + HasValidate + 'static,
@@ -55,14 +55,14 @@ where
             .await;
 
         match valid {
-            Ok(axum_valid::Garde(valid)) => Ok(Garde(valid)),
+            Ok(axum_valid::Garde(valid)) => Ok(Valid(valid)),
             Err(GardeRejection::Valid(garde)) => Err(ErrorKind::InvalidValue(garde).into()),
             Err(GardeRejection::Inner(err)) => Err(err.into()),
         }
     }
 }
 
-impl<T> IntoResponse for Garde<T>
+impl<T> IntoResponse for Valid<T>
 where
     T: IntoResponse,
 {
