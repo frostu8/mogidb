@@ -30,6 +30,24 @@ impl Error {
             kind: ErrorKind::Other(eyre::Error::new(error)),
         }
     }
+
+    /// `true` if an error is internal.
+    pub fn is_internal(&self) -> bool {
+        matches!(self.kind, ErrorKind::Other(_))
+    }
+
+    fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
+        let (status, error) = match self.kind {
+            _err => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiError {
+                    message: "An internal server error occured".into(),
+                },
+            ),
+        };
+
+        (status, error)
+    }
 }
 
 impl Display for Error {
@@ -64,7 +82,7 @@ pub enum ErrorKind {
 }
 
 impl IntoResponse for Error {
-    fn into_response(mut self) -> Response {
+    fn into_response(self) -> Response {
         let mut internal_error = None;
 
         let (status, error) = if self.is_internal() {

@@ -6,8 +6,17 @@ CREATE TABLE guild (
     players_required INTEGER NOT NULL DEFAULT 8,
     format_selection_mode INTEGER NOT NULL DEFAULT 0,
     votes_required INTEGER NOT NULL DEFAULT 4,
+    decay_after INTEGER NOT NULL DEFAULT 3000,
+    inactivity_warning_after INTEGER NOT NULL DEFAULT 1500,
+    inactivity_drop_after INTEGER NOT NULL DEFAULT 2100,
     inserted_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP NOT NULL,
+
+    CONSTRAINT chk_guild_players_required CHECK (players_required > 0),
+    CONSTRAINT chk_guild_votes_required CHECK (players_required > 0),
+    CONSTRAINT chk_guild_decay_after CHECK (decay_after >= 0),
+    CONSTRAINT chk_guild_inactivity_warning_after CHECK (inactivity_warning_after >= 0),
+    CONSTRAINT chk_guild_inactivity_drop_after CHECK (inactivity_drop_after >= 0)
 );
 
 -- Each guild has many channels called "rooms"
@@ -25,8 +34,17 @@ CREATE TABLE room (
     format_selection_mode INTEGER NOT NULL DEFAULT 0,
     -- How many votes a format needs to be selected.
     votes_required INTEGER NOT NULL DEFAULT 4,
+    decay_after INTEGER NOT NULL DEFAULT 3000,
+    inactivity_warning_after INTEGER NOT NULL DEFAULT 1500,
+    inactivity_drop_after INTEGER NOT NULL DEFAULT 2100,
     inserted_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP NOT NULL,
+
+    CONSTRAINT chk_guild_players_required CHECK (players_required > 0),
+    CONSTRAINT chk_guild_votes_required CHECK (players_required > 0),
+    CONSTRAINT chk_room_decay_after CHECK (decay_after >= 0),
+    CONSTRAINT chk_room_inactivity_warning_after CHECK (inactivity_warning_after >= 0),
+    CONSTRAINT chk_room_inactivity_drop_after CHECK (inactivity_drop_after >= 0)
 );
 
 -- Each guild also has many servers
