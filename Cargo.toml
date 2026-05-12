@@ -19,6 +19,8 @@ garde = { version = "0.22", features = ["derive"] }
 sqlx = { version = "0.8.6", features = ["chrono", "runtime-tokio-rustls", "sqlite"] }
 color-eyre = "0.6.5"
 chrono = { workspace = true, features = ["serde"] }
+num_enum = { workspace = true }
+bytemuck = { workspace = true, features = ["derive", "min_const_generics"] }
 
 [workspace]
 resolver = "3"
@@ -30,5 +32,6 @@ num_enum = "0.7"
 chrono = "0.4"
 derive_more = "2"
 mogidb-model = { path = "./model" }
+bytemuck = "1"
 serde = { version = "1", features = ["derive"] }
 serde_repr = "0.1"

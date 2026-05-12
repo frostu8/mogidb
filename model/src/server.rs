@@ -1,8 +1,12 @@
 //! Game server management.
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use serde::{Deserialize, Serialize};
+
 use serde_repr::{Deserialize_repr, Serialize_repr};
+
+use std::fmt::Write as _;
 
 use crate::guild::Guild;
 
@@ -30,21 +34,48 @@ pub struct GameServer {
 pub struct ServerInfo {
     // Server identification info.
     pub application: String,
-    pub version: i32,
-    pub subversion: i32,
+    pub version: u8,
+    pub subversion: u8,
     // Initial bytes of hash of commit
     pub commit: String,
 
     // Game settings
     pub gametype_name: String,
     pub server_name: String,
-    pub number_of_players: i32,
-    pub max_players: i32,
+    pub number_of_players: u8,
+    pub max_players: u8,
     pub modified_game: bool,
     pub cheats_enabled: bool,
-    pub avg_mobiums: bool,
+    pub avg_mobiums: u16,
 
     pub game_speed: GameSpeed,
+    pub flags: ServerFlags,
+    pub refuse_reason: RefuseReason,
+
+    // Current level properties
+    pub time: u32,
+    pub level_time: u32,
+    pub map_title: String,
+    pub map_md5: String,
+    pub actnum: u8,
+    pub is_zone: bool,
+
+    pub number_of_files: u8,
+    pub http_source: String,
+}
+
+impl ServerInfo {
+    /// The qualified map title of the map the server is playing.
+    pub fn map_name(&self) -> String {
+        let mut name = self.map_title.clone();
+        if self.is_zone {
+            write!(&mut name, " Zone").expect("write fmt");
+        }
+        if self.actnum > 0 {
+            write!(&mut name, " {}", self.actnum).expect("write fmt");
+        }
+        name
+    }
 }
 
 /// Game speed.

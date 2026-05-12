@@ -15,6 +15,8 @@ use axum::{
 use derive_more::{Display, From};
 use mogidb_model::error::ApiError;
 
+use crate::server::packet;
+
 /// An error.
 #[derive(Debug)]
 pub struct Error {
@@ -144,9 +146,14 @@ pub enum ErrorKind {
     /// A JSON rejection.
     #[display("{_0}")]
     Json(JsonRejection),
+    /// An error occured during SRB2 communications.
+    #[display("{_0}")]
+    Srb2Packet(packet::Error),
     /// A resource was not found.
+    #[display("entity not found")]
     NotFound,
     /// A resource with that identifier already exists.
+    #[display("entity already exists")]
     Exists,
     /// Some other internal error.
     #[from(ignore)]

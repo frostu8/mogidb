@@ -4,6 +4,7 @@ pub mod config;
 pub mod error;
 pub mod json;
 pub mod routes;
+pub mod server;
 pub mod validate;
 
 use std::sync::Arc;
