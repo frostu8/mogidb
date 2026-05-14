@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use axum::{
     Router,
+    extract::Request,
+    middleware::{Next, from_fn},
+    response::Response,
     routing::{get, patch, post},
 };
-use mogidb::{AppState, config::read_config};
+use mogidb::{AppState, config::read_config, error::Error};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 #[tokio::main]
@@ -24,7 +29,12 @@ async fn main() -> eyre::Result<()> {
         .route("/guilds", post(mogidb::routes::guild::create))
         .route("/guilds/{guild_id}", get(mogidb::routes::guild::show))
         .route("/guilds/{guild_id}", patch(mogidb::routes::guild::update))
-        .with_state(app_state);
+        .route(
+            "/guilds/{guild_id}/servers",
+            post(mogidb::routes::guild::server::create),
+        )
+        .with_state(app_state)
+        .layer(from_fn(log_app_errors));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8000")
         .await
@@ -33,4 +43,14 @@ async fn main() -> eyre::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+// Stolen from: https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs
+async fn log_app_errors(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    // If the response contains an AppError Extension, log it.
+    if let Some(err) = response.extensions().get::<Arc<Error>>() {
+        tracing::error!(?err, "an unexpected error occurred inside a handler");
+    }
+    response
 }

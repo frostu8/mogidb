@@ -1,27 +1,34 @@
 //! Lower-level SRB2 packet management.
 
+pub mod text;
+
+pub use text::Text;
+
 use std::{
     convert::Infallible,
     error::Error as StdError,
-    fmt::{self, Display, Formatter},
+    fmt::{self, Display, Formatter, Write},
     mem::size_of,
 };
 
 use bytemuck::{Pod, Zeroable};
-use derive_more::{Display, From};
+use derive_more::{Deref, Display, From};
 
-use mogidb_model::server::{GameSpeed, PlayerInfo, RefuseReason, ServerFlags, ServerInfo};
+use mogidb_model::server::{GameSpeed, RefuseReason, ServerFlags};
+
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 const RINGRACERS_VERSION: u8 = 2;
 const MAX_PLAYERS: usize = 16;
 
 const HEADER_LENGTH: usize = 8;
+const CHECKSUM_LENGTH: usize = size_of::<u32>();
 
 /// An SRB2 packet.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deref)]
 pub struct Packet {
     /// The inner payload.
+    #[deref]
     pub payload: Payload,
 }
 
@@ -48,7 +55,7 @@ impl Packet {
         checksum.copy_from_slice(&header[..4]);
         let checksum = u32::from_le_bytes(checksum);
 
-        let payload_checksum = net_checksum(payload);
+        let payload_checksum = net_checksum(&packet[CHECKSUM_LENGTH..]);
         if checksum != payload_checksum {
             return Err(ErrorKind::BadChecksum(payload_checksum).into());
         }
@@ -84,11 +91,12 @@ impl Packet {
 
         // Write inner payload
         self.payload.to_bytes(&mut packet[HEADER_LENGTH..]);
-        // calculate checksum
-        let checksum = net_checksum(&packet[HEADER_LENGTH..]);
 
         // Build header
         packet[6] = self.payload.packet_type().into();
+
+        // calculate checksum
+        let checksum = net_checksum(&packet[CHECKSUM_LENGTH..]);
         (&mut packet[0..4]).copy_from_slice(&checksum.to_le_bytes());
 
         Ok(packet)
@@ -196,6 +204,55 @@ impl From<AskInfoPacked> for AskInfo {
     }
 }
 
+/// Information about a running server.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ServerInfo {
+    // Server identification info.
+    pub application: String,
+    pub version: u8,
+    pub subversion: u8,
+    // Initial bytes of hash of commit
+    pub commit: String,
+
+    // Game settings
+    pub gametype_name: String,
+    pub server_name: Text,
+    pub number_of_players: u8,
+    pub max_players: u8,
+    pub modified_game: bool,
+    pub cheats_enabled: bool,
+    pub avg_mobiums: u16,
+
+    pub game_speed: GameSpeed,
+    pub flags: ServerFlags,
+    pub refuse_reason: RefuseReason,
+
+    // Current level properties
+    pub time: u32,
+    pub level_time: u32,
+    pub map_title: String,
+    pub map_md5: String,
+    pub actnum: u8,
+    pub is_zone: bool,
+
+    pub number_of_files: u8,
+    pub http_source: String,
+}
+
+impl ServerInfo {
+    /// The qualified map title of the map the server is playing.
+    pub fn map_name(&self) -> String {
+        let mut name = self.map_title.clone();
+        if self.is_zone {
+            write!(&mut name, " Zone").expect("write fmt");
+        }
+        if self.actnum > 0 {
+            write!(&mut name, " {}", self.actnum).expect("write fmt");
+        }
+        name
+    }
+}
+
 /// The server info returned in response to [`PacketType::AskInfo`].
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 #[repr(C)]
@@ -233,9 +290,16 @@ impl TryFrom<ServerInfoPacked> for ServerInfo {
         // First, we gotta convert all these stupid dumb strings
         let application = cstr(&value.application)?;
         let gametype_name = cstr(&value.gametypename)?;
-        let server_name = cstr(&value.servername)?;
         let map_title = cstr(&value.maptitle)?;
         let http_source = cstr(&value.httpsource)?;
+
+        // Strip colors
+        let nul_idx = value
+            .servername
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(value.servername.len());
+        let server_name = Text::from_bytes(&value.servername[..nul_idx])?;
 
         // Calculate MD5 of map, and commit hash
         let map_md5 = base16::encode_lower(&value.mapmd5);
@@ -257,7 +321,7 @@ impl TryFrom<ServerInfoPacked> for ServerInfo {
             subversion: value.subversion,
             commit,
             gametype_name: gametype_name.to_owned(),
-            server_name: server_name.to_owned(),
+            server_name,
             number_of_players: value.numberofplayer,
             max_players: value.maxplayer,
             modified_game: value.modifiedgame != 0,
@@ -275,6 +339,24 @@ impl TryFrom<ServerInfoPacked> for ServerInfo {
             number_of_files: value.fileneedednum,
             http_source: http_source.to_owned(),
         })
+    }
+}
+
+/// Information about a player in a server.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlayerInfo {
+    pub num: u8,
+    /// The player's display name.
+    pub name: String,
+    pub team: u8,
+    pub score: i32,
+    pub time_in_server: u16,
+}
+
+impl PlayerInfo {
+    /// Checks if this player slot is empty.
+    pub fn is_empty(&self) -> bool {
+        self.num == 255
     }
 }
 
@@ -324,7 +406,7 @@ pub enum PacketType {
 }
 
 /// An error serializing or deserializing a packet.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
 }
@@ -361,7 +443,7 @@ impl StdError for Error {
     }
 }
 
-#[derive(Clone, Debug, Display, From)]
+#[derive(Debug, Display, From)]
 pub enum ErrorKind {
     /// The packet was too short.
     #[display("packet too short, len: {_0}")]
@@ -382,6 +464,9 @@ pub enum ErrorKind {
     /// A UTF8 error occured when decoding.
     #[display("invalid utf8")]
     Utf8(std::str::Utf8Error),
+    /// An error occured while decoding ascii text.
+    #[display("invalid ascii")]
+    Text(text::TextError),
     /// An invalid packet type was given.
     #[display("invalid packet type")]
     InvalidPacketType(num_enum::TryFromPrimitiveError<PacketType>),
@@ -393,8 +478,8 @@ pub enum ErrorKind {
 fn net_checksum(payload: &[u8]) -> u32 {
     let mut checksum: u32 = 0x1234567;
     for (i, byte) in payload.iter().copied().enumerate() {
-        let (a, _) = checksum.overflowing_add(byte as u32);
-        checksum = a * (i as u32 + 1);
+        let (a, _) = (byte as u32).overflowing_mul(i as u32 + 1);
+        (checksum, _) = checksum.overflowing_add(a);
     }
     checksum
 }

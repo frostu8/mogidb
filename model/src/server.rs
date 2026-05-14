@@ -1,12 +1,16 @@
 //! Game server management.
 
+use chrono::{DateTime, Utc};
+use derive_more::Display;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use serde::{Deserialize, Serialize};
 
+use serde_with::{TryFromInto, serde_as};
+
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use std::fmt::Write as _;
+use std::error::Error as StdError;
 
 use crate::guild::Guild;
 
@@ -24,58 +28,45 @@ pub struct GameServer {
     pub note: Option<String>,
     /// Information about the currently running server.
     pub info: Option<ServerInfo>,
+    /// When the server was last pinged for information.
+    pub last_update_time: Option<DateTime<Utc>>,
     /// The guild the server beelongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guild: Option<Guild>,
 }
 
 /// Information about a running server.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct ServerInfo {
-    // Server identification info.
-    pub application: String,
-    pub version: u8,
-    pub subversion: u8,
-    // Initial bytes of hash of commit
-    pub commit: String,
-
-    // Game settings
-    pub gametype_name: String,
+    /// The name of the server, with colors removed.
     pub server_name: String,
-    pub number_of_players: u8,
+    /// The gametype of the server.
+    pub gametype_name: String,
+    /// Maximum player count.
     pub max_players: u8,
     pub modified_game: bool,
     pub cheats_enabled: bool,
     pub avg_mobiums: u16,
 
     pub game_speed: GameSpeed,
+    #[serde_as(as = "TryFromInto<u32>")]
     pub flags: ServerFlags,
-    pub refuse_reason: RefuseReason,
 
     // Current level properties
     pub time: u32,
     pub level_time: u32,
-    pub map_title: String,
+
+    /// The name of the map.
+    pub map_name: String,
+    /// The map's MD5 hash.
     pub map_md5: String,
-    pub actnum: u8,
-    pub is_zone: bool,
 
-    pub number_of_files: u8,
+    /// The server's HTTP source for addons.
     pub http_source: String,
-}
 
-impl ServerInfo {
-    /// The qualified map title of the map the server is playing.
-    pub fn map_name(&self) -> String {
-        let mut name = self.map_title.clone();
-        if self.is_zone {
-            write!(&mut name, " Zone").expect("write fmt");
-        }
-        if self.actnum > 0 {
-            write!(&mut name, " {}", self.actnum).expect("write fmt");
-        }
-        name
-    }
+    /// The players in the server.
+    pub players: Vec<PlayerInfo>,
 }
 
 /// Information about a player in a server.
@@ -87,13 +78,6 @@ pub struct PlayerInfo {
     pub team: u8,
     pub score: i32,
     pub time_in_server: u16,
-}
-
-impl PlayerInfo {
-    /// Checks if this player slot is empty.
-    pub fn is_empty(&self) -> bool {
-        self.num == 255
-    }
 }
 
 /// Game speed.
@@ -127,3 +111,23 @@ bitflags::bitflags! {
         const VOICE_ENABLED = 0x80;
     }
 }
+
+impl TryFrom<u32> for ServerFlags {
+    type Error = ServerFlagsError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        ServerFlags::from_bits(value).ok_or_else(|| ServerFlagsError(value))
+    }
+}
+
+impl From<ServerFlags> for u32 {
+    fn from(value: ServerFlags) -> Self {
+        value.bits()
+    }
+}
+
+#[derive(Debug, Display)]
+#[display("invalid server flags: {_0}")]
+pub struct ServerFlagsError(u32);
+
+impl StdError for ServerFlagsError {}

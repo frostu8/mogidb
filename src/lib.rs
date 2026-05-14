@@ -12,7 +12,7 @@ use std::sync::Arc;
 use color_eyre::Section;
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
-use crate::config::Config;
+use crate::{config::Config, server::ServerTracker};
 
 use eyre::eyre;
 
@@ -20,6 +20,7 @@ use eyre::eyre;
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub db: SqlitePool,
+    pub server_tracker: Arc<ServerTracker>,
     pub config: Arc<Config>,
 }
 
@@ -35,6 +36,7 @@ impl AppState {
 
         Ok(AppState {
             db,
+            server_tracker: Arc::new(ServerTracker::new()),
             config: Arc::new(config),
         })
     }

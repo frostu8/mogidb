@@ -84,19 +84,31 @@ impl Error {
             ErrorKind::NotFound => (
                 StatusCode::NOT_FOUND,
                 ApiError {
-                    message: "Resource does not exist".into(),
+                    message: "resource does not exist".into(),
                 },
             ),
             ErrorKind::Exists => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
-                    message: "A resource with that id already exists".into(),
+                    message: "a resource with that id already exists".into(),
+                },
+            ),
+            ErrorKind::UndefinedLabel => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: "server label not defined".into(),
+                },
+            ),
+            ErrorKind::RemoteExists(remote) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: format!("remote {} already exists", remote),
                 },
             ),
             _err => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiError {
-                    message: "An internal server error occured".into(),
+                    message: "an internal server error occured".into(),
                 },
             ),
         };
@@ -149,12 +161,18 @@ pub enum ErrorKind {
     /// An error occured during SRB2 communications.
     #[display("{_0}")]
     Srb2Packet(packet::Error),
+    /// A label was not given, and an attempt to generate one failed.
+    #[display("server label not defined")]
+    UndefinedLabel,
     /// A resource was not found.
     #[display("entity not found")]
     NotFound,
     /// A resource with that identifier already exists.
     #[display("entity already exists")]
     Exists,
+    /// An attempt was made to create a server with a remote already used.
+    #[display("remote server {_0} already exists")]
+    RemoteExists(String),
     /// Some other internal error.
     #[from(ignore)]
     Other(eyre::Error),

@@ -12,7 +12,9 @@ use mogidb_model::{event::FormatSelectionMode, guild::Guild, room::RoomSettings}
 use serde::Deserialize;
 use sqlx::FromRow;
 
-use crate::{AppState, error::Error, json::Json, validate::Valid};
+use crate::{
+    AppState, error::Error, json::Json, routes::guild::server::preload_servers, validate::Valid,
+};
 
 #[derive(Debug, Deserialize, Validate)]
 #[garde(context(AppState as state))]
@@ -64,6 +66,8 @@ impl UpdateGuildRequest {
 
 #[derive(FromRow)]
 struct GuildQuery {
+    pub id: i32,
+    pub discord_guild_id: i64,
     pub players_required: i32,
     #[sqlx(try_from = "u8")]
     pub format_selection_mode: FormatSelectionMode,
@@ -75,15 +79,21 @@ struct GuildQuery {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<&GuildQuery> for RoomSettings {
-    fn from(value: &GuildQuery) -> Self {
-        RoomSettings {
-            players_required: value.players_required,
-            format_selection_mode: value.format_selection_mode,
-            votes_required: value.votes_required,
-            decay_after: value.decay_after,
-            inactivity_warning_after: value.inactivity_warning_after,
-            inactivity_drop_after: value.inactivity_drop_after,
+impl From<GuildQuery> for Guild {
+    fn from(value: GuildQuery) -> Self {
+        Guild {
+            id: value.discord_guild_id,
+            default_settings: RoomSettings {
+                players_required: value.players_required,
+                format_selection_mode: value.format_selection_mode,
+                votes_required: value.votes_required,
+                decay_after: value.decay_after,
+                inactivity_warning_after: value.inactivity_warning_after,
+                inactivity_drop_after: value.inactivity_drop_after,
+            },
+            servers: None,
+            created_at: value.inserted_at,
+            updated_at: value.updated_at,
         }
     }
 }
@@ -125,8 +135,11 @@ pub async fn create(
 
     match res {
         Ok(_) => Ok(Json(Guild {
+            id: request.guild_id,
             created_at: now,
             updated_at: now,
+            // The guild is new, so it should not have any servers.
+            servers: Some(vec![]),
             default_settings: settings,
         })),
         // Guild already exists
@@ -142,25 +155,27 @@ pub async fn show(
     Path((guild_id,)): Path<(i64,)>,
     State(state): State<AppState>,
 ) -> Result<Json<Guild>, Error> {
+    let mut conn = state.db.acquire().await.map_err(Error::new)?;
+
     // Fetch the guild
     let res = sqlx::query_as::<_, GuildQuery>(
         r#"
         SELECT *
         FROM guild
-        WHERE id = $1
+        WHERE discord_guild_id = $1
         "#,
     )
     .bind(guild_id)
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)?;
 
     match res {
-        Some(row) => Ok(Json(Guild {
-            created_at: row.inserted_at,
-            updated_at: row.updated_at,
-            default_settings: (&row).into(),
-        })),
+        Some(row) => {
+            let mut guild: Guild = row.into();
+            preload_servers(&mut guild, &state.server_tracker, &mut *conn).await?;
+            Ok(Json(guild))
+        }
         None => Err(not_found(guild_id)),
     }
 }
@@ -180,7 +195,7 @@ pub async fn update(
         r#"
         SELECT *
         FROM guild
-        WHERE id = $1
+        WHERE discord_guild_id = $1
         "#,
     )
     .bind(guild_id)
@@ -193,8 +208,9 @@ pub async fn update(
     };
 
     // Get guild room settings
-    let settings = RoomSettings::from(&row);
-    let new_settings = request.merge(settings);
+    let guild_db_id = row.id;
+    let guild = Guild::from(row);
+    let new_settings = request.merge(guild.default_settings);
 
     // Set guild settings
     sqlx::query(
@@ -211,7 +227,7 @@ pub async fn update(
         WHERE id = $1
         "#,
     )
-    .bind(guild_id)
+    .bind(guild_db_id)
     .bind(now)
     .bind(new_settings.players_required)
     .bind(u8::from(new_settings.format_selection_mode))
@@ -223,11 +239,19 @@ pub async fn update(
     .await
     .map_err(Error::new)?;
 
-    Ok(Json(Guild {
-        created_at: row.inserted_at,
+    let mut guild = Guild {
+        id: guild.id,
+        servers: None,
+        created_at: guild.created_at,
         updated_at: now,
         default_settings: new_settings,
-    }))
+    };
+
+    preload_servers(&mut guild, &state.server_tracker, &mut *tx).await?;
+
+    tx.commit().await.map_err(Error::new)?;
+
+    Ok(Json(guild))
 }
 
 fn not_found(guild_id: i64) -> Error {
