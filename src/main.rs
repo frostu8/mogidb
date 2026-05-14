@@ -33,6 +33,10 @@ async fn main() -> eyre::Result<()> {
             "/guilds/{guild_id}/servers",
             post(mogidb::routes::guild::server::create),
         )
+        .route(
+            "/guilds/{guild_id}/servers/{server_id}",
+            get(mogidb::routes::guild::server::show),
+        )
         .with_state(app_state)
         .layer(from_fn(log_app_errors));
 
