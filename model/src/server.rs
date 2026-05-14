@@ -78,6 +78,24 @@ impl ServerInfo {
     }
 }
 
+/// Information about a player in a server.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct PlayerInfo {
+    pub num: u8,
+    /// The player's display name.
+    pub name: String,
+    pub team: u8,
+    pub score: i32,
+    pub time_in_server: u16,
+}
+
+impl PlayerInfo {
+    /// Checks if this player slot is empty.
+    pub fn is_empty(&self) -> bool {
+        self.num == 255
+    }
+}
+
 /// Game speed.
 #[derive(
     Clone, Debug, Deserialize_repr, PartialEq, Eq, Serialize_repr, TryFromPrimitive, IntoPrimitive,

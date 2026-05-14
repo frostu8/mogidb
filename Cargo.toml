@@ -12,7 +12,7 @@ eyre = "0.6.12"
 figment = { version = "0.10.19", features = ["env", "toml"] }
 serde = { workspace = true }
 mogidb-model = { workspace = true }
-tokio = { version = "1.52.3", features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1.52.3", features = ["macros", "rt", "rt-multi-thread", "net"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 garde = { version = "0.22", features = ["derive"] }
@@ -21,6 +21,8 @@ color-eyre = "0.6.5"
 chrono = { workspace = true, features = ["serde"] }
 num_enum = { workspace = true }
 bytemuck = { workspace = true, features = ["derive", "min_const_generics"] }
+papaya = "0.2.4"
+base16 = "0.2.1"
 
 [workspace]
 resolver = "3"
