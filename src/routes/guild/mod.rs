@@ -209,7 +209,7 @@ pub async fn update(
         r#"
         UPDATE guild
         SET
-            settings = $3
+            settings = $3,
             updated_at = $2
         WHERE id = $1
         "#,
