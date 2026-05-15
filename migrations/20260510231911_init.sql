@@ -3,20 +3,9 @@ CREATE TABLE guild (
     id INTEGER PRIMARY KEY,
     discord_guild_id BIGINT NOT NULL UNIQUE,
     -- These are the default settings for rooms in this guild.
-    players_required INTEGER NOT NULL DEFAULT 8,
-    format_selection_mode INTEGER NOT NULL DEFAULT 0,
-    votes_required INTEGER NOT NULL DEFAULT 4,
-    decay_after INTEGER NOT NULL DEFAULT 3000,
-    inactivity_warning_after INTEGER NOT NULL DEFAULT 1500,
-    inactivity_drop_after INTEGER NOT NULL DEFAULT 2100,
+    settings TEXT NOT NULL,
     inserted_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
-
-    CONSTRAINT chk_guild_players_required CHECK (players_required > 0),
-    CONSTRAINT chk_guild_votes_required CHECK (players_required > 0),
-    CONSTRAINT chk_guild_decay_after CHECK (decay_after >= 0),
-    CONSTRAINT chk_guild_inactivity_warning_after CHECK (inactivity_warning_after >= 0),
-    CONSTRAINT chk_guild_inactivity_drop_after CHECK (inactivity_drop_after >= 0)
+    updated_at TIMESTAMP NOT NULL
 );
 
 -- Each guild has many channels called "rooms"
@@ -24,27 +13,14 @@ CREATE TABLE room (
     id INTEGER PRIMARY KEY,
     parent_id INTEGER NOT NULL REFERENCES guild(id),
     discord_channel_id BIGINT NOT NULL UNIQUE,
+    -- The name of the channel.
+    name VARCHAR(255) NOT NULL,
     -- If events can be played in this room.
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    -- How many players are required to start a mogi.
-    players_required INTEGER NOT NULL DEFAULT 8,
-    -- Whether formats should be selected randomly or voted.
-    -- 0 - VOTE
-    -- 1 - RANDOM
-    format_selection_mode INTEGER NOT NULL DEFAULT 0,
-    -- How many votes a format needs to be selected.
-    votes_required INTEGER NOT NULL DEFAULT 4,
-    decay_after INTEGER NOT NULL DEFAULT 3000,
-    inactivity_warning_after INTEGER NOT NULL DEFAULT 1500,
-    inactivity_drop_after INTEGER NOT NULL DEFAULT 2100,
+    -- Settings overrides
+    overrides TEXT NOT NULL,
     inserted_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
-
-    CONSTRAINT chk_guild_players_required CHECK (players_required > 0),
-    CONSTRAINT chk_guild_votes_required CHECK (players_required > 0),
-    CONSTRAINT chk_room_decay_after CHECK (decay_after >= 0),
-    CONSTRAINT chk_room_inactivity_warning_after CHECK (inactivity_warning_after >= 0),
-    CONSTRAINT chk_room_inactivity_drop_after CHECK (inactivity_drop_after >= 0)
+    updated_at TIMESTAMP NOT NULL
 );
 
 -- Each guild also has many servers

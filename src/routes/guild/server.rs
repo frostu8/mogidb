@@ -131,7 +131,7 @@ pub async fn create(
         note: request.note.take(),
         last_update_time: server_state.as_ref().map(|res| res.last_ping_time),
         info: server_state.map(marshal_server_info),
-        guild: Some(guild.into()),
+        guild: Some(guild.try_into().map_err(Error::new)?),
     }))
 }
 
@@ -197,7 +197,7 @@ pub async fn show(
         note: server.note,
         last_update_time: res.as_ref().map(|res| res.last_ping_time),
         info: res.map(marshal_server_info),
-        guild: Some(guild.into()),
+        guild: Some(guild.try_into().map_err(Error::new)?),
     }))
 }
 

@@ -23,6 +23,7 @@ num_enum = { workspace = true }
 bytemuck = { workspace = true, features = ["derive", "min_const_generics"] }
 papaya = "0.2.4"
 base16 = "0.2.1"
+serde_json = "1.0.149"
 
 [workspace]
 resolver = "3"
