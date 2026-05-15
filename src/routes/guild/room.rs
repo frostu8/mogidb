@@ -12,7 +12,9 @@ use mogidb_model::{
 use serde::Deserialize;
 use sqlx::FromRow;
 
-use crate::{AppState, error::Error, json::Json, validate::Valid};
+use crate::{
+    AppState, error::Error, json::Json, routes::guild::server::preload_servers, validate::Valid,
+};
 
 #[derive(Debug, Deserialize, Validate)]
 #[garde(context(AppState as state))]
@@ -143,6 +145,9 @@ pub async fn create(
     .await
     .map_err(Error::new)?;
 
+    let mut guild = Guild::try_from(guild).map_err(Error::new)?;
+    preload_servers(&mut guild, &state.server_tracker, &mut *tx).await?;
+
     tx.commit().await.map_err(Error::new)?;
 
     Ok(Json(Room {
@@ -150,7 +155,7 @@ pub async fn create(
         name: request.name,
         enabled: request.enabled,
         settings: overrides,
-        guild: Guild::try_from(guild).map_err(Error::new)?,
+        guild,
         created_at: now,
         updated_at: now,
     }))
@@ -161,11 +166,13 @@ pub async fn show(
     Path((guild_id, channel_id)): Path<(i64, i64)>,
     State(state): State<AppState>,
 ) -> Result<Json<Room>, Error> {
+    let mut conn = state.db.acquire().await.map_err(Error::new)?;
+
     // Check if guild exists
     let (count,) =
         sqlx::query_as::<_, (i32,)>("SELECT COUNT(*) FROM guild WHERE discord_guild_id = $1")
             .bind(guild_id)
-            .fetch_one(&state.db)
+            .fetch_one(&mut *conn)
             .await
             .map_err(Error::new)?;
     if count <= 0 {
@@ -193,15 +200,18 @@ pub async fn show(
     )
     .bind(guild_id)
     .bind(channel_id)
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)?;
-    let Some(row) = row else {
+    let Some(room) = row else {
         return Err(Error::not_found(format_args!(
             "room {} not found",
             channel_id
         )));
     };
 
-    Ok(Json(Room::try_from(row).map_err(Error::new)?))
+    let mut room = Room::try_from(room).map_err(Error::new)?;
+    preload_servers(&mut room.guild, &state.server_tracker, &mut *conn).await?;
+
+    Ok(Json(room))
 }
