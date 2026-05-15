@@ -168,7 +168,7 @@ impl Payload {
         match self {
             Payload::AskInfo(pod) => {
                 let payload = AskInfoPacked {
-                    version: RINGRACERS_VERSION,
+                    version: pod.version,
                     time: pod.time,
                 };
                 buf.copy_from_slice(bytemuck::bytes_of(&payload));
