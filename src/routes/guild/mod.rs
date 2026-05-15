@@ -1,5 +1,6 @@
 //! Application routes for the guild.
 
+pub mod room;
 pub mod server;
 
 use axum::extract::{Path, State};
@@ -27,13 +28,21 @@ pub struct CreateGuildRequest {
     pub guild_id: i64,
     #[serde(flatten)]
     #[garde(dive)]
-    pub settings: UpdateGuildRequest,
+    pub settings: UpdateRoomSettings,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+#[garde(context(AppState as state))]
+pub struct UpdateGuildRequest {
+    #[serde(flatten)]
+    #[garde(dive)]
+    pub settings: UpdateRoomSettings,
 }
 
 #[derive(Default, Debug, Deserialize, Validate)]
 #[garde(context(AppState as state))]
 #[serde(default)]
-pub struct UpdateGuildRequest {
+pub struct UpdateRoomSettings {
     #[garde(range(min = 1))]
     pub players_required: Option<u32>,
     #[garde(skip)]
@@ -48,8 +57,8 @@ pub struct UpdateGuildRequest {
     pub inactivity_drop_after: Option<u32>,
 }
 
-impl From<UpdateGuildRequest> for RoomOverrides {
-    fn from(value: UpdateGuildRequest) -> Self {
+impl From<UpdateRoomSettings> for RoomOverrides {
+    fn from(value: UpdateRoomSettings) -> Self {
         RoomOverrides {
             players_required: value.players_required,
             format_selection_mode: value.format_selection_mode,
@@ -191,7 +200,7 @@ pub async fn update(
     let guild_db_id = row.id;
     let guild: Guild = row.try_into().map_err(Error::new)?;
 
-    let new_settings = guild.settings.merge(request.into());
+    let new_settings = guild.settings.merge(request.settings.into());
     // Serialize settings
     let serialized = serde_json::to_string(&new_settings).map_err(Error::new)?;
 

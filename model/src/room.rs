@@ -11,6 +11,8 @@ use crate::{event::FormatSelectionMode, guild::Guild};
 /// A single mogi room.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Room {
+    /// The id of the room.
+    pub id: i64,
     /// The name of the room.
     ///
     /// This is the same as the name of the channel.

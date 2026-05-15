@@ -1213,6 +1213,7 @@ dependencies = [
  "papaya",
  "serde",
  "serde_json",
+ "serde_with",
  "sqlx",
  "tokio",
  "tracing",

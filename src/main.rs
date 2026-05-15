@@ -41,6 +41,14 @@ async fn main() -> eyre::Result<()> {
             "/guilds/{guild_id}/servers/{server_id}",
             delete(mogidb::routes::guild::server::delete),
         )
+        .route(
+            "/guilds/{guild_id}/rooms",
+            post(mogidb::routes::guild::room::create),
+        )
+        .route(
+            "/guilds/{guild_id}/rooms/{room_id}",
+            get(mogidb::routes::guild::room::show),
+        )
         .with_state(app_state)
         .layer(from_fn(log_app_errors));
 
