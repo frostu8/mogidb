@@ -24,7 +24,6 @@ pub struct GameServer {
     /// The server's label.
     pub label: String,
     /// A user defined note for the server.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Information about the currently running server.
     pub info: Option<ServerInfo>,
