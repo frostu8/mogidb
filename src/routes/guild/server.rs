@@ -1,6 +1,9 @@
 //! Server management and knocking.
 
-use axum::extract::{Path, State};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+};
 
 use chrono::Utc;
 use garde::Validate;
@@ -196,6 +199,59 @@ pub async fn show(
         info: res.map(marshal_server_info),
         guild: Some(guild.into()),
     }))
+}
+
+/// Deletes a server.
+pub async fn delete(
+    Path((guild_id, server_id)): Path<(i64, i32)>,
+    State(state): State<AppState>,
+) -> Result<StatusCode, Error> {
+    let mut tx = state.db.begin().await.map_err(Error::new)?;
+
+    // Get guild
+    let guild = sqlx::query_as::<_, super::GuildQuery>(
+        r#"
+        SELECT *
+        FROM guild
+        WHERE discord_guild_id = $1
+        "#,
+    )
+    .bind(guild_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(Error::new)?;
+    let Some(guild) = guild else {
+        return Err(Error::not_found(format_args!(
+            "guild {} not found",
+            guild_id
+        )));
+    };
+
+    // Delete server
+    let res = sqlx::query(
+        r#"
+        DELETE FROM server
+        WHERE
+            id = $1
+            AND guild_id = $2
+        "#,
+    )
+    .bind(server_id)
+    .bind(guild.id)
+    .execute(&mut *tx)
+    .await
+    .map_err(Error::new)?;
+
+    tx.commit().await.map_err(Error::new)?;
+
+    if res.rows_affected() > 0 {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(Error::not_found(format_args!(
+            "server {} not found",
+            server_id
+        )))
+    }
 }
 
 /// Preloads servers in a guild

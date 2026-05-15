@@ -5,7 +5,7 @@ use axum::{
     extract::Request,
     middleware::{Next, from_fn},
     response::Response,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
 };
 use mogidb::{AppState, config::read_config, error::Error};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
@@ -36,6 +36,10 @@ async fn main() -> eyre::Result<()> {
         .route(
             "/guilds/{guild_id}/servers/{server_id}",
             get(mogidb::routes::guild::server::show),
+        )
+        .route(
+            "/guilds/{guild_id}/servers/{server_id}",
+            delete(mogidb::routes::guild::server::delete),
         )
         .with_state(app_state)
         .layer(from_fn(log_app_errors));

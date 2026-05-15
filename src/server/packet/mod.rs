@@ -75,8 +75,16 @@ impl Packet {
                 Payload::ServerInfo(ServerInfo::try_from(payload)?)
             }
             PacketType::PlayerInfo => {
-                let payload = unpack_payload::<PlayerInfoPacked>(payload)?;
-                Payload::PlayerInfo(PlayerInfo::try_from(payload)?)
+                // Player info contains many players, unpack em all!!
+                let mut players = Vec::with_capacity(MAX_PLAYERS);
+                for i in 0..MAX_PLAYERS {
+                    let start = i * size_of::<PlayerInfoPacked>();
+                    let end = (i + 1) * size_of::<PlayerInfoPacked>();
+
+                    let payload = unpack_payload::<PlayerInfoPacked>(&payload[start..end])?;
+                    players.push(PlayerInfo::try_from(payload)?);
+                }
+                Payload::PlayerInfo(players)
             }
             _ => todo!(),
         };
@@ -126,7 +134,7 @@ where
 pub enum Payload {
     AskInfo(AskInfo),
     ServerInfo(ServerInfo),
-    PlayerInfo(PlayerInfo),
+    PlayerInfo(Vec<PlayerInfo>),
 }
 
 impl Payload {
@@ -294,12 +302,7 @@ impl TryFrom<ServerInfoPacked> for ServerInfo {
         let http_source = cstr(&value.httpsource)?;
 
         // Strip colors
-        let nul_idx = value
-            .servername
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(value.servername.len());
-        let server_name = Text::from_bytes(&value.servername[..nul_idx])?;
+        let server_name = Text::from_cstr(&value.servername)?;
 
         // Calculate MD5 of map, and commit hash
         let map_md5 = base16::encode_lower(&value.mapmd5);
@@ -380,13 +383,19 @@ impl TryFrom<PlayerInfoPacked> for PlayerInfo {
 
     fn try_from(value: PlayerInfoPacked) -> Result<Self, Self::Error> {
         // Do strings
-        let name = cstr(&value.name)?;
+        let name = match cstr(&value.name) {
+            Ok(name) => name.to_owned(),
+            // Unfortunately, Ring Racers is prone to sending us garbage if the
+            // player slot is empty.
+            Err(_) if value.num == 255 => String::new(),
+            Err(err) => return Err(err.into()),
+        };
 
         // We intentionally ignore value.address for obvious reasons
 
         Ok(PlayerInfo {
             num: value.num,
-            name: name.to_owned(),
+            name,
             team: value.team,
             score: value.score,
             time_in_server: value.timeinserver,
@@ -438,6 +447,10 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match &self.kind {
             ErrorKind::InvalidPacketType(err) => Some(err),
+            ErrorKind::InvalidGameSpeed(err) => Some(err),
+            ErrorKind::InvalidRefuseReason(err) => Some(err),
+            ErrorKind::Utf8(err) => Some(err),
+            ErrorKind::Text(err) => Some(err),
             _ => None,
         }
     }

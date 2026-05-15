@@ -2,6 +2,7 @@
 
 use std::{
     borrow::Cow,
+    error::Error as StdError,
     fmt::{self, Display, Formatter},
     str::from_utf8,
 };
@@ -57,6 +58,12 @@ impl Text {
         &self.0
     }
 
+    /// Converts from a Ring Racers c-str packet.
+    pub fn from_cstr(buf: &[u8]) -> Result<Text, TextError> {
+        let nul_idx = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+        Text::from_bytes(&buf[..nul_idx])
+    }
+
     /// Converts text from a slice of bytes.
     pub fn from_bytes(buf: &[u8]) -> Result<Text, TextError> {
         let mut result = Vec::with_capacity(buf.len());
@@ -90,3 +97,5 @@ impl Display for TextError {
         write!(f, "invalid ascii text @ {}", self.valid_up_to)
     }
 }
+
+impl StdError for TextError {}

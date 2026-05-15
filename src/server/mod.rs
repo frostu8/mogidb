@@ -153,7 +153,7 @@ pub struct KnockResult {
 }
 
 /// Sends an ask packet, and times the first response
-async fn ask(socket: &UdpSocket, buf: &mut [u8]) -> Result<Duration, Error> {
+async fn ask(socket: &UdpSocket, buf: &mut [u8]) -> Result<(usize, Duration), Error> {
     // Create an ask packet
     let packet = Packet::ask_info();
     let data = packet.pack()?;
@@ -164,10 +164,10 @@ async fn ask(socket: &UdpSocket, buf: &mut [u8]) -> Result<Duration, Error> {
     socket.send(&data).await?;
 
     // Wait for a response
-    socket.recv(buf).await?;
+    let len = socket.recv(buf).await?;
     let end_time = Instant::now();
 
-    Ok(end_time - start_time)
+    Ok((len, end_time - start_time))
 }
 
 async fn get_info(remote: SocketAddr, socket: &UdpSocket) -> Result<GetInfoResult, Error> {
@@ -177,14 +177,15 @@ async fn get_info(remote: SocketAddr, socket: &UdpSocket) -> Result<GetInfoResul
 
     // Send the ask packet to kick things off
     let mut buf = [0u8; 1500];
-    let ping = ask(socket, &mut buf).await?;
+    let (mut packet_len, ping) = ask(socket, &mut buf).await?;
 
     loop {
         // Decode packet
-        let packet = match Packet::unpack(&buf) {
+        let packet = match Packet::unpack(&buf[..packet_len]) {
             Ok(packet) => packet,
             Err(err) => {
-                tracing::warn!("got error {} knocking for server {}", err, remote);
+                tracing::warn!("got error knocking for server {}", remote);
+                tracing::warn!("{:?}", eyre::Report::new(err));
                 continue;
             }
         };
@@ -196,11 +197,13 @@ async fn get_info(remote: SocketAddr, socket: &UdpSocket) -> Result<GetInfoResul
         );
 
         match packet.payload {
-            Payload::ServerInfo(recv_info) => info = Some(recv_info),
-            Payload::PlayerInfo(recv_player) if !recv_player.is_empty() => {
-                players.push(recv_player);
+            Payload::ServerInfo(recv_info) => {
+                tracing::debug!("expecting {} players", recv_info.number_of_players);
+                info = Some(recv_info);
             }
-            Payload::PlayerInfo(_) => (),
+            Payload::PlayerInfo(recv_players) => {
+                players.extend(recv_players.into_iter().filter(|p| !p.is_empty()));
+            }
             _ => tracing::warn!(
                 "got unexpected packet {:?} knocking for server {}",
                 packet.packet_type(),
@@ -221,7 +224,7 @@ async fn get_info(remote: SocketAddr, socket: &UdpSocket) -> Result<GetInfoResul
         }
 
         // Get next packet
-        socket.recv(&mut buf).await?;
+        packet_len = socket.recv(&mut buf).await?;
     }
 }
 
