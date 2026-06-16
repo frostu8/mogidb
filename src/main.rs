@@ -26,32 +26,29 @@ async fn main() -> eyre::Result<()> {
 
     let app_state = AppState::new(config).await?;
     let app = Router::new()
-        .route("/guilds", post(mogidb::routes::guild::create))
-        .route("/guilds/{guild_id}", get(mogidb::routes::guild::show))
-        .route("/guilds/{guild_id}", patch(mogidb::routes::guild::update))
-        .route(
-            "/guilds/{guild_id}/servers",
-            post(mogidb::routes::guild::server::create),
-        )
-        .route(
-            "/guilds/{guild_id}/servers/{server_id}",
-            get(mogidb::routes::guild::server::show),
-        )
-        .route(
-            "/guilds/{guild_id}/servers/{server_id}",
-            delete(mogidb::routes::guild::server::delete),
-        )
-        .route(
-            "/guilds/{guild_id}/rooms",
-            post(mogidb::routes::guild::room::create),
-        )
-        .route(
-            "/guilds/{guild_id}/rooms/{room_id}",
-            get(mogidb::routes::guild::room::show),
-        )
-        .route(
-            "/guilds/{guild_id}/rooms/{room_id}",
-            patch(mogidb::routes::guild::room::update),
+        .nest(
+            "/guilds",
+            Router::new()
+                .route("/", post(mogidb::routes::guild::create))
+                .route("/{guild_id}", get(mogidb::routes::guild::show))
+                .route("/{guild_id}", patch(mogidb::routes::guild::update))
+                .nest(
+                    "/{guild_id}/servers",
+                    Router::new()
+                        .route("/", post(mogidb::routes::guild::server::create))
+                        .route("/{server_id}", get(mogidb::routes::guild::server::show))
+                        .route(
+                            "/{server_id}",
+                            delete(mogidb::routes::guild::server::delete),
+                        ),
+                )
+                .nest(
+                    "/{guild_id}/rooms",
+                    Router::new()
+                        .route("/", post(mogidb::routes::guild::room::create))
+                        .route("/{room_id}", get(mogidb::routes::guild::room::show))
+                        .route("/{room_id}", patch(mogidb::routes::guild::room::update)),
+                ),
         )
         .with_state(app_state)
         .layer(from_fn(log_app_errors));
