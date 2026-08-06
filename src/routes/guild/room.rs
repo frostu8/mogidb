@@ -10,7 +10,7 @@ use garde::Validate;
 use mogidb_model::{
     event::FormatSelectionMode,
     guild::Guild,
-    room::{Room, RoomOptions, RoomOverrides},
+    room::{Room, RoomOptions, RoomOptionsOverrides},
 };
 use serde::Deserialize;
 use sqlx::FromRow;
@@ -57,8 +57,8 @@ pub struct UpdateRoomRequest {
 }
 
 impl UpdateRoomRequest {
-    pub fn update(self, other: RoomOverrides) -> RoomOverrides {
-        RoomOverrides {
+    pub fn update(self, other: RoomOptionsOverrides) -> RoomOptionsOverrides {
+        RoomOptionsOverrides {
             players_required: self.players_required.unwrap_or(other.players_required),
             format_selection_mode: self
                 .format_selection_mode
@@ -100,7 +100,7 @@ impl TryFrom<RoomQuery> for Room {
             id: value.discord_channel_id,
             name: value.name,
             enabled: value.enabled,
-            settings: serde_json::from_str::<RoomOverrides>(&value.overrides)?,
+            settings: serde_json::from_str::<RoomOptionsOverrides>(&value.overrides)?,
             created_at: value.inserted_at,
             updated_at: value.updated_at,
 
@@ -145,7 +145,7 @@ pub async fn create(
     };
 
     // Create room overrides
-    let overrides = RoomOverrides::from(request.settings);
+    let overrides = RoomOptionsOverrides::from(request.settings);
 
     // Serialize
     let serialized = serde_json::to_string(&overrides).map_err(Error::new)?;

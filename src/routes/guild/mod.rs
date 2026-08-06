@@ -11,7 +11,7 @@ use garde::Validate;
 use mogidb_model::{
     event::FormatSelectionMode,
     guild::Guild,
-    room::{RoomOptions, RoomOverrides},
+    room::{RoomOptions, RoomOptionsOverrides},
 };
 
 use serde::Deserialize;
@@ -57,9 +57,9 @@ pub struct UpdateRoomSettings {
     pub inactivity_drop_after: Option<u32>,
 }
 
-impl From<UpdateRoomSettings> for RoomOverrides {
+impl From<UpdateRoomSettings> for RoomOptionsOverrides {
     fn from(value: UpdateRoomSettings) -> Self {
-        RoomOverrides {
+        RoomOptionsOverrides {
             players_required: value.players_required,
             format_selection_mode: value.format_selection_mode,
             votes_required: value.votes_required,
@@ -102,7 +102,7 @@ pub async fn create(
     let now = Utc::now();
 
     // Get the settings for the new guild
-    let settings = RoomOverrides::from(request.settings);
+    let settings = RoomOptionsOverrides::from(request.settings);
     let settings = RoomOptions::default().merge(settings);
 
     // Serialize settings

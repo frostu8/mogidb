@@ -20,7 +20,7 @@ pub struct Room {
     /// Whether the room is enabled or not.
     pub enabled: bool,
     /// The room settings.
-    pub settings: RoomOverrides,
+    pub settings: RoomOptionsOverrides,
     pub guild: Guild,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -51,7 +51,7 @@ pub struct RoomOptions {
 
 impl RoomOptions {
     /// Merges a room options with its overrides.
-    pub fn merge(self, other: RoomOverrides) -> RoomOptions {
+    pub fn merge(self, other: RoomOptionsOverrides) -> RoomOptions {
         RoomOptions {
             players_required: other.players_required.unwrap_or(self.players_required),
             format_selection_mode: other
@@ -87,7 +87,7 @@ impl Default for RoomOptions {
 /// These allow `None` values for the fields.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-pub struct RoomOverrides {
+pub struct RoomOptionsOverrides {
     pub players_required: Option<u32>,
     pub format_selection_mode: Option<FormatSelectionMode>,
     pub votes_required: Option<u32>,
