@@ -49,7 +49,8 @@ async fn main() -> eyre::Result<()> {
                     Router::new()
                         .route("/", post(mogidb::routes::guild::room::create))
                         .route("/{room_id}", get(mogidb::routes::guild::room::show))
-                        .route("/{room_id}", patch(mogidb::routes::guild::room::update)),
+                        .route("/{room_id}", patch(mogidb::routes::guild::room::update))
+                        .route("/{room_id}", delete(mogidb::routes::guild::room::delete)),
                 ),
         )
         .with_state(app_state)
