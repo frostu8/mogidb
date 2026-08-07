@@ -1,6 +1,7 @@
 //! Mogi database.
 
 pub mod config;
+pub mod docs;
 pub mod error;
 pub mod json;
 pub mod routes;

@@ -2,6 +2,7 @@
 name = "mogidb"
 version = "0.1.0"
 edition = "2024"
+default-run = "mogidb"
 
 [dependencies]
 axum = { version = "0.8", features = ["macros"] }
@@ -25,6 +26,10 @@ papaya = "0.2.4"
 base16 = "0.2.1"
 serde_json = "1.0.149"
 serde_with = { workspace = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true, features = ["axum"] }
+clap = { version = "4", features = ["derive"] }
+serde_norway = "0.9.42"
 
 [workspace]
 resolver = "3"
@@ -40,3 +45,5 @@ bytemuck = "1"
 serde = { version = "1", features = ["derive"] }
 serde_repr = "0.1"
 serde_with = "3"
+utoipa = { version = "5", features = ["chrono", "repr"] }
+utoipa-swagger-ui = "9"

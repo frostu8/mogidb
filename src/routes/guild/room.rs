@@ -8,50 +8,72 @@ use axum::{
 use chrono::{DateTime, Utc};
 use garde::Validate;
 use mogidb_model::{
+    error::ApiError,
     event::FormatSelectionMode,
     guild::Guild,
     room::{Room, RoomOptions, RoomOptionsOverrides},
 };
 use serde::Deserialize;
 use sqlx::FromRow;
+use utoipa::ToSchema;
 
 use crate::{
     AppState, error::Error, json::Json, routes::guild::server::preload_servers, validate::Valid,
 };
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
 pub struct CreateRoomRequest {
+    /// The ID of the Discord channel associated with the room.
     #[garde(skip)]
     pub room_id: i64,
+    /// The name of the room.
     #[garde(length(min = 1))]
+    #[schema(min_length = 1)]
     pub name: String,
+    /// If the room is enabled.
     #[garde(skip)]
     #[serde(default)]
     pub enabled: bool,
+    /// The room settings.
     #[serde(flatten)]
     #[garde(dive)]
+    #[schema(inline)]
     pub settings: super::UpdateRoomSettings,
 }
 
-#[derive(Default, Debug, Deserialize, Validate)]
+#[derive(Default, Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
 #[serde(default)]
 pub struct UpdateRoomRequest {
+    /// The name of the room.
+    ///
+    /// This is always the channel name, and can be used to update the channel
+    /// name when it changes on Discord's end.
     #[garde(length(min = 1))]
+    #[schema(min_length = 1)]
     pub name: Option<String>,
+    /// If the room is enabled.
     #[garde(skip)]
     pub enabled: Option<bool>,
+    /// The amount of players needed to start an event.
     #[garde(range(min = 1))]
+    #[schema(minimum = 1)]
     pub players_required: Option<Option<u32>>,
+    /// The mode for format selection.
     #[garde(skip)]
     pub format_selection_mode: Option<Option<FormatSelectionMode>>,
+    /// The amount of votes needed for a format to be selected.
     #[garde(range(min = 1))]
+    #[schema(minimum = 1)]
     pub votes_required: Option<Option<u32>>,
+    /// The amount of time it takes for events to decay, in seconds.
     #[garde(range(min = 0))]
     pub decay_after: Option<Option<u32>>,
+    /// The amount of time before the bot warns someone for inactivity, in seconds.
     #[garde(range(min = 0))]
     pub inactivity_warning_after: Option<Option<u32>>,
+    /// The amount of time before the bot drops someone for inactivity, in seconds.
     #[garde(range(min = 0))]
     pub inactivity_drop_after: Option<Option<u32>>,
 }
@@ -116,6 +138,21 @@ impl TryFrom<RoomQuery> for Room {
 }
 
 /// Creates a new room for a discord channel.
+#[utoipa::path(
+    post,
+    path = "/guilds/{guild_id}/rooms",
+    tag = "room",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+    ),
+    request_body = CreateRoomRequest,
+    responses(
+        (status = OK, description = "The newly created room", body = Room),
+        (status = BAD_REQUEST, description = "Invalid request", body = ApiError),
+        (status = NOT_FOUND, description = "Guild not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn create(
     Path((guild_id,)): Path<(i64,)>,
     State(state): State<AppState>,
@@ -187,6 +224,20 @@ pub async fn create(
 }
 
 /// Shows an existing room.
+#[utoipa::path(
+    get,
+    path = "/guilds/{guild_id}/rooms/{room_id}",
+    tag = "room",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+        ("room_id" = i64, Path, description = "Discord channel id of the room"),
+    ),
+    responses(
+        (status = OK, description = "The room", body = Room),
+        (status = NOT_FOUND, description = "Guild or room not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn show(
     Path((guild_id, channel_id)): Path<(i64, i64)>,
     State(state): State<AppState>,
@@ -242,6 +293,22 @@ pub async fn show(
 }
 
 /// Updates an existing room.
+#[utoipa::path(
+    patch,
+    path = "/guilds/{guild_id}/rooms/{room_id}",
+    tag = "room",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+        ("room_id" = i64, Path, description = "Discord channel id of the room"),
+    ),
+    request_body = UpdateRoomRequest,
+    responses(
+        (status = OK, description = "The updated room", body = Room),
+        (status = BAD_REQUEST, description = "Invalid request", body = ApiError),
+        (status = NOT_FOUND, description = "Guild or room not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn update(
     Path((guild_id, channel_id)): Path<(i64, i64)>,
     State(state): State<AppState>,
@@ -340,6 +407,20 @@ pub async fn update(
 }
 
 /// Deletes a room.
+#[utoipa::path(
+    delete,
+    path = "/guilds/{guild_id}/rooms/{room_id}",
+    tag = "room",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+        ("room_id" = i64, Path, description = "Discord channel id of the room"),
+    ),
+    responses(
+        (status = NO_CONTENT, description = "The room was deleted"),
+        (status = NOT_FOUND, description = "Guild or room not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn delete(
     Path((guild_id, room_id)): Path<(i64, i64)>,
     State(state): State<AppState>,

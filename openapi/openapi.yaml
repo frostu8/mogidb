@@ -1,0 +1,1045 @@
+openapi: 3.1.0
+info:
+  title: MogiDB
+  description: Gutbuster backend database and API.
+  license:
+    name: ''
+  version: 0.1.0
+paths:
+  /guilds:
+    post:
+      tags:
+      - guild
+      summary: Creates a new guild.
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGuildRequest'
+        required: true
+      responses:
+        '200':
+          description: The newly created guild
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guild'
+        '400':
+          description: Invalid request or guild already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /guilds/{guild_id}:
+    get:
+      tags:
+      - guild
+      summary: Fetches a guild.
+      operationId: show
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: The guild
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guild'
+        '404':
+          description: Guild not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    patch:
+      tags:
+      - guild
+      summary: Updates guild details.
+      operationId: update
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGuildRequest'
+        required: true
+      responses:
+        '200':
+          description: The updated guild
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guild'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Guild not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /guilds/{guild_id}/rooms:
+    post:
+      tags:
+      - room
+      summary: Creates a new room for a discord channel.
+      operationId: create
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+        required: true
+      responses:
+        '200':
+          description: The newly created room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Guild not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /guilds/{guild_id}/rooms/{room_id}:
+    get:
+      tags:
+      - room
+      summary: Shows an existing room.
+      operationId: show
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: room_id
+        in: path
+        description: Discord channel id of the room
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: The room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '404':
+          description: Guild or room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      tags:
+      - room
+      summary: Deletes a room.
+      operationId: delete
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: room_id
+        in: path
+        description: Discord channel id of the room
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '204':
+          description: The room was deleted
+        '404':
+          description: Guild or room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    patch:
+      tags:
+      - room
+      summary: Updates an existing room.
+      operationId: update
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: room_id
+        in: path
+        description: Discord channel id of the room
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+        required: true
+      responses:
+        '200':
+          description: The updated room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Guild or room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /guilds/{guild_id}/servers:
+    post:
+      tags:
+      - server
+      summary: Adds a server to the register.
+      description: This will first ping the server to see if it exists.
+      operationId: create
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServerRequest'
+        required: true
+      responses:
+        '200':
+          description: The newly registered server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameServer'
+        '400':
+          description: Invalid request, undefined label, or remote already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Guild not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /guilds/{guild_id}/servers/{server_id}:
+    get:
+      tags:
+      - server
+      summary: Shows a server.
+      operationId: show
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: server_id
+        in: path
+        description: Server id
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: The server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameServer'
+        '404':
+          description: Guild or server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      tags:
+      - server
+      summary: Deletes a server.
+      operationId: delete
+      parameters:
+      - name: guild_id
+        in: path
+        description: Discord guild id
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: server_id
+        in: path
+        description: Server id
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '204':
+          description: The server was deleted
+        '404':
+          description: Guild or server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  schemas:
+    ApiError:
+      type: object
+      description: An API error.
+      required:
+      - message
+      properties:
+        message:
+          type: string
+    CreateGuildRequest:
+      allOf:
+      - type: object
+        properties:
+          decay_after:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of time it takes for events to decay, in seconds.
+            default: null
+            minimum: 0
+          format_selection_mode:
+            oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/FormatSelectionMode'
+              description: The mode for format selection.
+            default: null
+          inactivity_drop_after:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of time before the bot drops someone for inactivity, in seconds.
+            default: null
+            minimum: 0
+          inactivity_warning_after:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of time before the bot warns someone for inactivity, in seconds.
+            default: null
+            minimum: 0
+          players_required:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of players needed to start an event.
+            default: null
+            minimum: 1
+          votes_required:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of votes needed for a format to be selected.
+            default: null
+            minimum: 1
+      - type: object
+        required:
+        - guild_id
+        properties:
+          guild_id:
+            type: integer
+            format: int64
+    CreateRoomRequest:
+      allOf:
+      - oneOf:
+        - type: object
+          properties:
+            decay_after:
+              type:
+              - integer
+              - 'null'
+              format: int32
+              description: The amount of time it takes for events to decay, in seconds.
+              default: null
+              minimum: 0
+            format_selection_mode:
+              oneOf:
+              - type: 'null'
+              - $ref: '#/components/schemas/FormatSelectionMode'
+                description: The mode for format selection.
+              default: null
+            inactivity_drop_after:
+              type:
+              - integer
+              - 'null'
+              format: int32
+              description: The amount of time before the bot drops someone for inactivity, in seconds.
+              default: null
+              minimum: 0
+            inactivity_warning_after:
+              type:
+              - integer
+              - 'null'
+              format: int32
+              description: The amount of time before the bot warns someone for inactivity, in seconds.
+              default: null
+              minimum: 0
+            players_required:
+              type:
+              - integer
+              - 'null'
+              format: int32
+              description: The amount of players needed to start an event.
+              default: null
+              minimum: 1
+            votes_required:
+              type:
+              - integer
+              - 'null'
+              format: int32
+              description: The amount of votes needed for a format to be selected.
+              default: null
+              minimum: 1
+        description: The room settings.
+      - type: object
+        required:
+        - room_id
+        - name
+        properties:
+          enabled:
+            type: boolean
+            description: If the room is enabled.
+          name:
+            type: string
+            description: The name of the room.
+            minLength: 1
+          room_id:
+            type: integer
+            format: int64
+            description: The ID of the Discord channel associated with the room.
+    CreateServerRequest:
+      type: object
+      required:
+      - remote
+      properties:
+        label:
+          type:
+          - string
+          - 'null'
+          description: A user-defined label for the server. Falls back to the server name.
+          minLength: 1
+        note:
+          type:
+          - string
+          - 'null'
+          description: A user-defined note for the server.
+        remote:
+          type: string
+          description: The remote address of the server, in `host:port` form.
+    FormatSelectionMode:
+      type: integer
+      description: Event format selection mode.
+      enum:
+      - 0
+      - 1
+    GameServer:
+      type: object
+      description: A game server.
+      required:
+      - id
+      - remote
+      - label
+      properties:
+        guild:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Guild'
+            description: The guild the server beelongs to.
+        id:
+          type: integer
+          format: int32
+          description: The id of the guild.
+        info:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ServerInfo'
+            description: Information about the currently running server.
+        label:
+          type: string
+          description: The server's label.
+        last_update_time:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the server was last pinged for information.
+        note:
+          type:
+          - string
+          - 'null'
+          description: A user defined note for the server.
+        remote:
+          type: string
+          description: The remote address of the server.
+    GameSpeed:
+      type: integer
+      description: Game speed.
+      enum:
+      - 0
+      - 1
+      - 2
+    Guild:
+      type: object
+      description: A guild.
+      required:
+      - id
+      - settings
+      - created_at
+      - updated_at
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: integer
+          format: int64
+        servers:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/GameServer'
+        settings:
+          $ref: '#/components/schemas/RoomOptions'
+        updated_at:
+          type: string
+          format: date-time
+    PlayerInfo:
+      type: object
+      description: Information about a player in a server.
+      required:
+      - num
+      - name
+      - team
+      - score
+      - time_in_server
+      properties:
+        name:
+          type: string
+          description: The player's display name.
+        num:
+          type: integer
+          format: int32
+          minimum: 0
+        score:
+          type: integer
+          format: int32
+        team:
+          type: integer
+          format: int32
+          minimum: 0
+        time_in_server:
+          type: integer
+          format: int32
+          minimum: 0
+    Room:
+      type: object
+      description: A single mogi room.
+      required:
+      - id
+      - name
+      - enabled
+      - settings
+      - guild
+      - created_at
+      - updated_at
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+          description: Whether the room is enabled or not.
+        guild:
+          $ref: '#/components/schemas/Guild'
+        id:
+          type: integer
+          format: int64
+          description: The id of the room.
+        name:
+          type: string
+          description: |-
+            The name of the room.
+
+            This is the same as the name of the channel.
+        settings:
+          $ref: '#/components/schemas/RoomOptionsOverrides'
+          description: The room settings.
+        updated_at:
+          type: string
+          format: date-time
+    RoomOptions:
+      type: object
+      description: Room configuration.
+      properties:
+        decay_after:
+          type: integer
+          format: int32
+          description: |-
+            The amount of time it takes for events to decay, in seconds.
+
+            When an event decays, it can be ended before the event starts.
+          default: 3000
+          minimum: 0
+        format_selection_mode:
+          oneOf:
+          - $ref: '#/components/schemas/FormatSelectionMode'
+            description: The mode for format selection.
+          default: 0
+        inactivity_drop_after:
+          type: integer
+          format: int32
+          description: |-
+            The amount of time before the bot drops someone for inactivity, in
+            seconds.
+          default: 2100
+          minimum: 0
+        inactivity_warning_after:
+          type: integer
+          format: int32
+          description: |-
+            The amount of time before the bot warns someone for inactivity, in
+            seconds.
+          default: 1500
+          minimum: 0
+        players_required:
+          type: integer
+          format: int32
+          description: The amount of players needed to start an event.
+          default: 8
+          minimum: 0
+        votes_required:
+          type: integer
+          format: int32
+          description: |-
+            The amount of votes needed for a format to be selected before time is
+            up.
+          default: 4
+          minimum: 0
+    RoomOptionsOverrides:
+      type: object
+      description: |-
+        Room configuration overrides.
+
+        These allow `None` values for the fields.
+      properties:
+        decay_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        format_selection_mode:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/FormatSelectionMode'
+        inactivity_drop_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        inactivity_warning_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        players_required:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        votes_required:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+    ServerInfo:
+      type: object
+      description: Information about a running server.
+      required:
+      - server_name
+      - gametype_name
+      - max_players
+      - modified_game
+      - cheats_enabled
+      - avg_mobiums
+      - game_speed
+      - flags
+      - time
+      - level_time
+      - map_name
+      - map_md5
+      - http_source
+      - players
+      properties:
+        avg_mobiums:
+          type: integer
+          format: int32
+          description: The average skill level of the lobby.
+          minimum: 0
+        cheats_enabled:
+          type: boolean
+          description: '`true` if cheats are on.'
+        flags:
+          type: integer
+          format: int32
+          description: |-
+            Server flags.
+            * `LOTS_OF_ADDONS = 0x20`
+              The server serves more addons than can be represented in a single
+              `PT_SERVERINFO` packet.
+            * `DEDICATED = 0x40`
+              The server is a dedicated server.
+            * `VOICE_ENABLED = 0x80`
+              The server has proximity voice chat enabled.
+          minimum: 0
+        game_speed:
+          $ref: '#/components/schemas/GameSpeed'
+        gametype_name:
+          type: string
+          description: The gametype of the server.
+        http_source:
+          type: string
+          description: The server's HTTP source for addons.
+        level_time:
+          type: integer
+          format: int32
+          description: The time (in tics) the server has been in the current map.
+          minimum: 0
+        map_md5:
+          type: string
+          description: The map's MD5 hash.
+        map_name:
+          type: string
+          description: The name of the map.
+        max_players:
+          type: integer
+          format: int32
+          description: Maximum player count.
+          minimum: 0
+        modified_game:
+          type: boolean
+          description: '`true` if the game has addons.'
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerInfo'
+          description: The players in the server.
+        server_name:
+          type: string
+          description: The name of the server, with colors removed.
+        time:
+          type: integer
+          format: int32
+          description: The time (in tics) the server has been running.
+          minimum: 0
+    UpdateGuildRequest:
+      allOf:
+      - type: object
+        properties:
+          decay_after:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of time it takes for events to decay, in seconds.
+            default: null
+            minimum: 0
+          format_selection_mode:
+            oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/FormatSelectionMode'
+              description: The mode for format selection.
+            default: null
+          inactivity_drop_after:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of time before the bot drops someone for inactivity, in seconds.
+            default: null
+            minimum: 0
+          inactivity_warning_after:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of time before the bot warns someone for inactivity, in seconds.
+            default: null
+            minimum: 0
+          players_required:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of players needed to start an event.
+            default: null
+            minimum: 1
+          votes_required:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: The amount of votes needed for a format to be selected.
+            default: null
+            minimum: 1
+    UpdateRoomRequest:
+      type: object
+      properties:
+        decay_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of time it takes for events to decay, in seconds.
+          default: null
+          minimum: 0
+        enabled:
+          type:
+          - boolean
+          - 'null'
+          description: If the room is enabled.
+          default: null
+        format_selection_mode:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/FormatSelectionMode'
+            description: The mode for format selection.
+          default: null
+        inactivity_drop_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of time before the bot drops someone for inactivity, in seconds.
+          default: null
+          minimum: 0
+        inactivity_warning_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of time before the bot warns someone for inactivity, in seconds.
+          default: null
+          minimum: 0
+        name:
+          type:
+          - string
+          - 'null'
+          description: |-
+            The name of the room.
+
+            This is always the channel name, and can be used to update the channel
+            name when it changes on Discord's end.
+          default: null
+          minLength: 1
+        players_required:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of players needed to start an event.
+          default: null
+          minimum: 1
+        votes_required:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of votes needed for a format to be selected.
+          default: null
+          minimum: 1
+    UpdateRoomSettings:
+      type: object
+      properties:
+        decay_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of time it takes for events to decay, in seconds.
+          default: null
+          minimum: 0
+        format_selection_mode:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/FormatSelectionMode'
+            description: The mode for format selection.
+          default: null
+        inactivity_drop_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of time before the bot drops someone for inactivity, in seconds.
+          default: null
+          minimum: 0
+        inactivity_warning_after:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of time before the bot warns someone for inactivity, in seconds.
+          default: null
+          minimum: 0
+        players_required:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of players needed to start an event.
+          default: null
+          minimum: 1
+        votes_required:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The amount of votes needed for a format to be selected.
+          default: null
+          minimum: 1
+tags:
+- name: guild
+  description: Guild management
+- name: room
+  description: Room management
+- name: server
+  description: Game server management

@@ -7,8 +7,10 @@ use axum::{
     response::Response,
     routing::{delete, get, patch, post},
 };
-use mogidb::{AppState, config::read_config, error::Error};
+use mogidb::{AppState, config::read_config, docs::ApiDoc, error::Error};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
+use utoipa::OpenApi as _;
+use utoipa_swagger_ui::SwaggerUi;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -51,7 +53,8 @@ async fn main() -> eyre::Result<()> {
                 ),
         )
         .with_state(app_state)
-        .layer(from_fn(log_app_errors));
+        .layer(from_fn(log_app_errors))
+        .merge(SwaggerUi::new("/swagger").url("/openapi/openapi.json", ApiDoc::openapi()));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8000")
         .await

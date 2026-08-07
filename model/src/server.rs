@@ -9,13 +9,14 @@ use serde::{Deserialize, Serialize};
 use serde_with::{TryFromInto, serde_as};
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use utoipa::ToSchema;
 
 use std::error::Error as StdError;
 
 use crate::guild::Guild;
 
 /// A game server.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub struct GameServer {
     /// The id of the guild.
     pub id: i32,
@@ -31,12 +32,13 @@ pub struct GameServer {
     pub last_update_time: Option<DateTime<Utc>>,
     /// The guild the server beelongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(no_recursion)]
     pub guild: Option<Guild>,
 }
 
 /// Information about a running server.
 #[serde_as]
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub struct ServerInfo {
     /// The name of the server, with colors removed.
     pub server_name: String,
@@ -44,16 +46,29 @@ pub struct ServerInfo {
     pub gametype_name: String,
     /// Maximum player count.
     pub max_players: u8,
+    /// `true` if the game has addons.
     pub modified_game: bool,
+    /// `true` if cheats are on.
     pub cheats_enabled: bool,
+    /// The average skill level of the lobby.
     pub avg_mobiums: u16,
 
     pub game_speed: GameSpeed,
+    /// Server flags.
+    /// * `LOTS_OF_ADDONS = 0x20`
+    ///   The server serves more addons than can be represented in a single
+    ///   `PT_SERVERINFO` packet.
+    /// * `DEDICATED = 0x40`
+    ///   The server is a dedicated server.
+    /// * `VOICE_ENABLED = 0x80`
+    ///   The server has proximity voice chat enabled.
+    #[schema(value_type = u32)]
     #[serde_as(as = "TryFromInto<u32>")]
     pub flags: ServerFlags,
 
-    // Current level properties
+    /// The time (in tics) the server has been running.
     pub time: u32,
+    /// The time (in tics) the server has been in the current map.
     pub level_time: u32,
 
     /// The name of the map.
@@ -69,7 +84,7 @@ pub struct ServerInfo {
 }
 
 /// Information about a player in a server.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub struct PlayerInfo {
     pub num: u8,
     /// The player's display name.
@@ -81,7 +96,15 @@ pub struct PlayerInfo {
 
 /// Game speed.
 #[derive(
-    Clone, Debug, Deserialize_repr, PartialEq, Eq, Serialize_repr, TryFromPrimitive, IntoPrimitive,
+    Clone,
+    Debug,
+    Deserialize_repr,
+    PartialEq,
+    Eq,
+    Serialize_repr,
+    TryFromPrimitive,
+    IntoPrimitive,
+    ToSchema,
 )]
 #[repr(u8)]
 pub enum GameSpeed {

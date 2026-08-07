@@ -9,12 +9,14 @@ use chrono::Utc;
 use garde::Validate;
 
 use mogidb_model::{
+    error::ApiError,
     guild::Guild,
     server::{GameServer, PlayerInfo, ServerInfo},
 };
 
 use serde::Deserialize;
 use sqlx::{FromRow, SqliteConnection};
+use utoipa::ToSchema;
 
 use crate::{
     AppState,
@@ -24,13 +26,17 @@ use crate::{
     validate::Valid,
 };
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
 pub struct CreateServerRequest {
+    /// The remote address of the server, in `host:port` form.
     #[garde(custom(is_valid_remote))]
     pub remote: String,
+    /// A user-defined label for the server. Falls back to the server name.
     #[garde(length(min = 1))]
+    #[schema(min_length = 1)]
     pub label: Option<String>,
+    /// A user-defined note for the server.
     #[garde(length(min = 0))]
     pub note: Option<String>,
 }
@@ -46,6 +52,21 @@ struct ServerQuery {
 /// Adds a server to the register.
 ///
 /// This will first ping the server to see if it exists.
+#[utoipa::path(
+    post,
+    path = "/guilds/{guild_id}/servers",
+    tag = "server",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+    ),
+    request_body = CreateServerRequest,
+    responses(
+        (status = OK, description = "The newly registered server", body = GameServer),
+        (status = BAD_REQUEST, description = "Invalid request, undefined label, or remote already exists", body = ApiError),
+        (status = NOT_FOUND, description = "Guild not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 #[axum::debug_handler]
 pub async fn create(
     Path((guild_id,)): Path<(i64,)>,
@@ -136,6 +157,20 @@ pub async fn create(
 }
 
 /// Shows a server.
+#[utoipa::path(
+    get,
+    path = "/guilds/{guild_id}/servers/{server_id}",
+    tag = "server",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+        ("server_id" = i32, Path, description = "Server id"),
+    ),
+    responses(
+        (status = OK, description = "The server", body = GameServer),
+        (status = NOT_FOUND, description = "Guild or server not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn show(
     Path((guild_id, server_id)): Path<(i64, i32)>,
     State(state): State<AppState>,
@@ -202,6 +237,20 @@ pub async fn show(
 }
 
 /// Deletes a server.
+#[utoipa::path(
+    delete,
+    path = "/guilds/{guild_id}/servers/{server_id}",
+    tag = "server",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+        ("server_id" = i32, Path, description = "Server id"),
+    ),
+    responses(
+        (status = NO_CONTENT, description = "The server was deleted"),
+        (status = NOT_FOUND, description = "Guild or server not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn delete(
     Path((guild_id, server_id)): Path<(i64, i32)>,
     State(state): State<AppState>,

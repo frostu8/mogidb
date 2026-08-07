@@ -5,11 +5,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use serde_with::skip_serializing_none;
+use utoipa::ToSchema;
 
 use crate::{event::FormatSelectionMode, guild::Guild};
 
 /// A single mogi room.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub struct Room {
     /// The id of the room.
     pub id: i64,
@@ -21,13 +22,14 @@ pub struct Room {
     pub enabled: bool,
     /// The room settings.
     pub settings: RoomOptionsOverrides,
+    #[schema(no_recursion)]
     pub guild: Guild,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 /// Room configuration.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(default)]
 pub struct RoomOptions {
     /// The amount of players needed to start an event.
@@ -86,7 +88,7 @@ impl Default for RoomOptions {
 ///
 /// These allow `None` values for the fields.
 #[skip_serializing_none]
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub struct RoomOptionsOverrides {
     pub players_required: Option<u32>,
     pub format_selection_mode: Option<FormatSelectionMode>,

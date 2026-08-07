@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use garde::Validate;
 
 use mogidb_model::{
+    error::ApiError,
     event::FormatSelectionMode,
     guild::Guild,
     room::{RoomOptions, RoomOptionsOverrides},
@@ -16,43 +17,54 @@ use mogidb_model::{
 
 use serde::Deserialize;
 use sqlx::FromRow;
+use utoipa::ToSchema;
 
 use crate::{
     AppState, error::Error, json::Json, routes::guild::server::preload_servers, validate::Valid,
 };
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
 pub struct CreateGuildRequest {
     #[garde(skip)]
     pub guild_id: i64,
     #[serde(flatten)]
     #[garde(dive)]
+    #[schema(inline)]
     pub settings: UpdateRoomSettings,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
 pub struct UpdateGuildRequest {
     #[serde(flatten)]
     #[garde(dive)]
+    #[schema(inline)]
     pub settings: UpdateRoomSettings,
 }
 
-#[derive(Default, Debug, Deserialize, Validate)]
+#[derive(Default, Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
 #[serde(default)]
 pub struct UpdateRoomSettings {
+    /// The amount of players needed to start an event.
     #[garde(range(min = 1))]
+    #[schema(minimum = 1)]
     pub players_required: Option<u32>,
+    /// The mode for format selection.
     #[garde(skip)]
     pub format_selection_mode: Option<FormatSelectionMode>,
+    /// The amount of votes needed for a format to be selected.
     #[garde(range(min = 1))]
+    #[schema(minimum = 1)]
     pub votes_required: Option<u32>,
+    /// The amount of time it takes for events to decay, in seconds.
     #[garde(range(min = 0))]
     pub decay_after: Option<u32>,
+    /// The amount of time before the bot warns someone for inactivity, in seconds.
     #[garde(range(min = 0))]
     pub inactivity_warning_after: Option<u32>,
+    /// The amount of time before the bot drops someone for inactivity, in seconds.
     #[garde(range(min = 0))]
     pub inactivity_drop_after: Option<u32>,
 }
@@ -94,6 +106,17 @@ impl TryFrom<GuildQuery> for Guild {
 }
 
 /// Creates a new guild.
+#[utoipa::path(
+    post,
+    path = "/guilds",
+    tag = "guild",
+    request_body = CreateGuildRequest,
+    responses(
+        (status = OK, description = "The newly created guild", body = Guild),
+        (status = BAD_REQUEST, description = "Invalid request or guild already exists", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 #[axum::debug_handler]
 pub async fn create(
     State(state): State<AppState>,
@@ -140,6 +163,19 @@ pub async fn create(
 }
 
 /// Fetches a guild.
+#[utoipa::path(
+    get,
+    path = "/guilds/{guild_id}",
+    tag = "guild",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+    ),
+    responses(
+        (status = OK, description = "The guild", body = Guild),
+        (status = NOT_FOUND, description = "Guild not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn show(
     Path((guild_id,)): Path<(i64,)>,
     State(state): State<AppState>,
@@ -170,6 +206,21 @@ pub async fn show(
 }
 
 /// Updates guild details.
+#[utoipa::path(
+    patch,
+    path = "/guilds/{guild_id}",
+    tag = "guild",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+    ),
+    request_body = UpdateGuildRequest,
+    responses(
+        (status = OK, description = "The updated guild", body = Guild),
+        (status = BAD_REQUEST, description = "Invalid request", body = ApiError),
+        (status = NOT_FOUND, description = "Guild not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
 pub async fn update(
     Path((guild_id,)): Path<(i64,)>,
     State(state): State<AppState>,
