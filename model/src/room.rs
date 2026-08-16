@@ -7,10 +7,13 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use utoipa::ToSchema;
 
-use crate::{event::FormatSelectionMode, guild::Guild};
+use crate::{
+    event::{EventFormat, FormatSelectionMode},
+    guild::Guild,
+};
 
 /// A single mogi room.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ToSchema)]
 pub struct Room {
     /// The id of the room.
     pub id: i64,
@@ -22,6 +25,9 @@ pub struct Room {
     pub enabled: bool,
     /// The room settings.
     pub settings: RoomOptionsOverrides,
+    /// The allowed formats for the room.
+    #[schema(no_recursion)]
+    pub formats: Vec<EventFormat>,
     #[schema(no_recursion)]
     pub guild: Guild,
     pub created_at: DateTime<Utc>,

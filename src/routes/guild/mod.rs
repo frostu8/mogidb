@@ -5,7 +5,7 @@ pub mod server;
 
 use axum::extract::{Path, State};
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use garde::Validate;
 
 use mogidb_model::{
@@ -16,11 +16,14 @@ use mogidb_model::{
 };
 
 use serde::Deserialize;
-use sqlx::FromRow;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState, error::Error, json::Json, routes::guild::server::preload_servers, validate::Valid,
+    AppState,
+    error::Error,
+    guild::{GuildEntity, preload_servers},
+    json::Json,
+    validate::Valid,
 };
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -79,29 +82,6 @@ impl From<UpdateRoomSettings> for RoomOptionsOverrides {
             inactivity_warning_after: value.inactivity_warning_after,
             inactivity_drop_after: value.inactivity_drop_after,
         }
-    }
-}
-
-#[derive(FromRow)]
-struct GuildQuery {
-    pub id: i32,
-    pub discord_guild_id: i64,
-    pub settings: String,
-    pub inserted_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl TryFrom<GuildQuery> for Guild {
-    type Error = serde_json::Error;
-
-    fn try_from(value: GuildQuery) -> Result<Self, Self::Error> {
-        Ok(Guild {
-            id: value.discord_guild_id,
-            settings: serde_json::from_str::<RoomOptions>(&value.settings)?,
-            servers: None,
-            created_at: value.inserted_at,
-            updated_at: value.updated_at,
-        })
     }
 }
 
@@ -183,7 +163,7 @@ pub async fn show(
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
     // Fetch the guild
-    let res = sqlx::query_as::<_, GuildQuery>(
+    let res = sqlx::query_as::<_, GuildEntity>(
         r#"
         SELECT *
         FROM guild
@@ -231,7 +211,7 @@ pub async fn update(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     // Fetch the guild
-    let res = sqlx::query_as::<_, GuildQuery>(
+    let res = sqlx::query_as::<_, GuildEntity>(
         r#"
         SELECT *
         FROM guild

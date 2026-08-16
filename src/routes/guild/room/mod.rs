@@ -1,24 +1,30 @@
 //! Room management.
 
+pub mod format;
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use garde::Validate;
 use mogidb_model::{
     error::ApiError,
     event::FormatSelectionMode,
     guild::Guild,
-    room::{Room, RoomOptions, RoomOptionsOverrides},
+    room::{Room, RoomOptionsOverrides},
 };
 use serde::Deserialize;
-use sqlx::FromRow;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState, error::Error, json::Json, routes::guild::server::preload_servers, validate::Valid,
+    AppState,
+    error::Error,
+    guild::{GuildEntity, preload_servers},
+    json::Json,
+    room::{get_room, preload_formats},
+    validate::Valid,
 };
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -97,46 +103,6 @@ impl UpdateRoomRequest {
     }
 }
 
-#[derive(FromRow)]
-struct RoomQuery {
-    pub id: i32,
-    pub discord_channel_id: i64,
-    pub name: String,
-    pub enabled: bool,
-    pub overrides: String,
-    pub inserted_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-
-    // Guild fields
-    pub discord_guild_id: i64,
-    pub settings: String,
-    pub guild_inserted_at: DateTime<Utc>,
-    pub guild_updated_at: DateTime<Utc>,
-}
-
-impl TryFrom<RoomQuery> for Room {
-    type Error = serde_json::Error;
-
-    fn try_from(value: RoomQuery) -> Result<Self, Self::Error> {
-        Ok(Room {
-            id: value.discord_channel_id,
-            name: value.name,
-            enabled: value.enabled,
-            settings: serde_json::from_str::<RoomOptionsOverrides>(&value.overrides)?,
-            created_at: value.inserted_at,
-            updated_at: value.updated_at,
-
-            guild: Guild {
-                id: value.discord_guild_id,
-                settings: serde_json::from_str::<RoomOptions>(&value.settings)?,
-                servers: None,
-                created_at: value.guild_inserted_at,
-                updated_at: value.guild_updated_at,
-            },
-        })
-    }
-}
-
 /// Creates a new room for a discord channel.
 #[utoipa::path(
     post,
@@ -163,7 +129,7 @@ pub async fn create(
     let now = Utc::now();
 
     // Get guild
-    let guild = sqlx::query_as::<_, super::GuildQuery>(
+    let guild = sqlx::query_as::<_, GuildEntity>(
         r#"
         SELECT *
         FROM guild
@@ -210,17 +176,21 @@ pub async fn create(
     let mut guild = Guild::try_from(guild).map_err(Error::new)?;
     preload_servers(&mut guild, &state.server_tracker, &mut *tx).await?;
 
-    tx.commit().await.map_err(Error::new)?;
-
-    Ok(Json(Room {
+    let mut room = Room {
         id: request.room_id,
         name: request.name,
         enabled: request.enabled,
         settings: overrides,
         guild,
+        formats: vec![],
         created_at: now,
         updated_at: now,
-    }))
+    };
+    preload_formats(&mut room, &mut *tx).await?;
+
+    tx.commit().await.map_err(Error::new)?;
+
+    Ok(Json(room))
 }
 
 /// Shows an existing room.
@@ -258,35 +228,10 @@ pub async fn show(
         )));
     }
 
-    // Get guild and room
-    let row = sqlx::query_as::<_, RoomQuery>(
-        r#"
-        SELECT
-            r.*,
-            g.settings,
-            g.discord_guild_id,
-            g.inserted_at AS guild_inserted_at,
-            g.updated_at AS guild_updated_at
-        FROM room r, guild g
-        WHERE
-            discord_guild_id = $1
-            AND discord_channel_id  = $2
-            AND r.parent_id = g.id
-        "#,
-    )
-    .bind(guild_id)
-    .bind(channel_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(Error::new)?;
-    let Some(room) = row else {
-        return Err(Error::not_found(format_args!(
-            "room {} not found",
-            channel_id
-        )));
-    };
-
+    let room = get_room(guild_id, channel_id, &mut conn).await?;
     let mut room = Room::try_from(room).map_err(Error::new)?;
+
+    preload_formats(&mut room, &mut *conn).await?;
     preload_servers(&mut room.guild, &state.server_tracker, &mut *conn).await?;
 
     Ok(Json(room))
@@ -332,37 +277,14 @@ pub async fn update(
         )));
     }
 
-    // Get guild and room
-    let row = sqlx::query_as::<_, RoomQuery>(
-        r#"
-        SELECT
-            r.*,
-            g.settings,
-            g.discord_guild_id,
-            g.inserted_at AS guild_inserted_at,
-            g.updated_at AS guild_updated_at
-        FROM room r, guild g
-        WHERE
-            discord_guild_id = $1
-            AND discord_channel_id  = $2
-            AND r.parent_id = g.id
-        "#,
-    )
-    .bind(guild_id)
-    .bind(channel_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-    let Some(room) = row else {
-        return Err(Error::not_found(format_args!(
-            "room {} not found",
-            channel_id
-        )));
-    };
-
     // Get room
+    let room = get_room(guild_id, channel_id, &mut tx).await?;
     let room_id = room.id;
+
     let mut room = Room::try_from(room).map_err(Error::new)?;
+
+    preload_formats(&mut room, &mut *tx).await?;
+    preload_servers(&mut room.guild, &state.server_tracker, &mut *tx).await?;
 
     // Update settings
     if let Some(enabled) = request.enabled {
@@ -428,7 +350,7 @@ pub async fn delete(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     // Get guild
-    let guild = sqlx::query_as::<_, super::GuildQuery>(
+    let guild = sqlx::query_as::<_, GuildEntity>(
         r#"
         SELECT *
         FROM guild

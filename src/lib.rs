@@ -3,7 +3,9 @@
 pub mod config;
 pub mod docs;
 pub mod error;
+pub mod guild;
 pub mod json;
+pub mod room;
 pub mod routes;
 pub mod server;
 pub mod validate;

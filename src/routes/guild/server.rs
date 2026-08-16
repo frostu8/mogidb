@@ -8,21 +8,18 @@ use axum::{
 use chrono::Utc;
 use garde::Validate;
 
-use mogidb_model::{
-    error::ApiError,
-    guild::Guild,
-    server::{GameServer, PlayerInfo, ServerInfo},
-};
+use mogidb_model::{error::ApiError, server::GameServer};
 
 use serde::Deserialize;
-use sqlx::{FromRow, SqliteConnection};
+use sqlx::FromRow;
 use utoipa::ToSchema;
 
 use crate::{
     AppState,
     error::{Error, ErrorKind},
+    guild::marshal_server_info,
     json::Json,
-    server::{Error as ServerError, KnockResult, ServerTracker},
+    server::Error as ServerError,
     validate::Valid,
 };
 
@@ -78,7 +75,7 @@ pub async fn create(
     let remote = request.remote.trim();
 
     // Get guild
-    let guild = sqlx::query_as::<_, super::GuildQuery>(
+    let guild = sqlx::query_as::<_, super::GuildEntity>(
         r#"
         SELECT *
         FROM guild
@@ -176,7 +173,7 @@ pub async fn show(
     State(state): State<AppState>,
 ) -> Result<Json<GameServer>, Error> {
     // Get guild
-    let guild = sqlx::query_as::<_, super::GuildQuery>(
+    let guild = sqlx::query_as::<_, super::GuildEntity>(
         r#"
         SELECT *
         FROM guild
@@ -258,7 +255,7 @@ pub async fn delete(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     // Get guild
-    let guild = sqlx::query_as::<_, super::GuildQuery>(
+    let guild = sqlx::query_as::<_, super::GuildEntity>(
         r#"
         SELECT *
         FROM guild
@@ -300,83 +297,6 @@ pub async fn delete(
             "server {} not found",
             server_id
         )))
-    }
-}
-
-/// Preloads servers in a guild
-pub async fn preload_servers(
-    guild: &mut Guild,
-    tracker: &ServerTracker,
-    conn: &mut SqliteConnection,
-) -> Result<(), Error> {
-    let mut servers = Vec::new();
-
-    // List all servers in a guild
-    let res = sqlx::query_as::<_, ServerQuery>(
-        r#"
-        SELECT s.*
-        FROM server s, guild g
-        WHERE
-            s.guild_id = g.id
-            AND g.discord_guild_id = $1
-        "#,
-    )
-    .bind(guild.id)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(Error::new)?;
-
-    for row in res {
-        // Ping server
-        let remote_server = match tracker.knock(&row.remote).await {
-            Ok(res) => Some(res),
-            // Request timed out, maybe the server is down?
-            // Fetch cached result
-            Err(ServerError::Timeout(_)) => tracker.get(&row.remote),
-            Err(ServerError::Packet(err)) => return Err(ErrorKind::Srb2Packet(err).into()),
-            Err(err) => return Err(Error::new(err)),
-        };
-        servers.push(GameServer {
-            id: row.id,
-            remote: row.remote,
-            label: row.label,
-            note: row.note,
-            last_update_time: remote_server.as_ref().map(|res| res.last_ping_time),
-            info: remote_server.map(marshal_server_info),
-            guild: None,
-        });
-    }
-
-    guild.servers = Some(servers);
-
-    Ok(())
-}
-
-fn marshal_server_info(KnockResult { info, players, .. }: KnockResult) -> ServerInfo {
-    ServerInfo {
-        map_name: info.map_name(),
-        server_name: info.server_name.to_stripped_str().into_owned(),
-        gametype_name: info.gametype_name,
-        max_players: info.max_players,
-        modified_game: info.modified_game,
-        cheats_enabled: info.cheats_enabled,
-        avg_mobiums: info.avg_mobiums,
-        game_speed: info.game_speed,
-        flags: info.flags,
-        time: info.time,
-        level_time: info.level_time,
-        map_md5: info.map_md5,
-        http_source: info.http_source,
-        players: players
-            .into_iter()
-            .map(|player| PlayerInfo {
-                num: player.num,
-                name: player.name,
-                team: player.team,
-                score: player.score,
-                time_in_server: player.time_in_server,
-            })
-            .collect::<Vec<_>>(),
     }
 }
 

@@ -51,6 +51,10 @@ async fn main() -> eyre::Result<()> {
                         .route("/{room_id}", get(mogidb::routes::guild::room::show))
                         .route("/{room_id}", patch(mogidb::routes::guild::room::update))
                         .route("/{room_id}", delete(mogidb::routes::guild::room::delete)),
+                )
+                .nest(
+                    "/{guild_id}/rooms/{room_id}/formats",
+                    Router::new().route("/", post(mogidb::routes::guild::room::format::create)),
                 ),
         )
         .with_state(app_state)
