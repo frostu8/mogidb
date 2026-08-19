@@ -3,6 +3,7 @@
 pub mod config;
 pub mod docs;
 pub mod error;
+pub mod form;
 pub mod guild;
 pub mod json;
 pub mod room;
@@ -13,6 +14,7 @@ pub mod validate;
 use std::sync::Arc;
 
 use color_eyre::Section;
+use serde::{Deserialize, Deserializer};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
 use crate::{config::Config, server::ServerTracker};
@@ -43,4 +45,13 @@ impl AppState {
             config: Arc::new(config),
         })
     }
+}
+
+/// Deserialization helper for distinguishing between null and absent.
+fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Option::deserialize(deserializer).map(Some)
 }

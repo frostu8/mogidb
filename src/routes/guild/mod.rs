@@ -18,13 +18,7 @@ use mogidb_model::{
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{
-    AppState,
-    error::Error,
-    guild::{GuildEntity, preload_servers},
-    json::Json,
-    validate::Valid,
-};
+use crate::{AppState, error::Error, guild::GuildEntity, json::Json, validate::Valid};
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
@@ -176,9 +170,10 @@ pub async fn show(
     .map_err(Error::new)?;
 
     match res {
-        Some(row) => {
-            let mut guild: Guild = row.try_into().map_err(Error::new)?;
-            preload_servers(&mut guild, &state.server_tracker, &mut *conn).await?;
+        Some(mut row) => {
+            row.preload_servers(&state.server_tracker, &mut *conn)
+                .await?;
+            let guild: Guild = row.try_into().map_err(Error::new)?;
             Ok(Json(guild))
         }
         None => Err(not_found(guild_id)),
@@ -223,13 +218,14 @@ pub async fn update(
     .await
     .map_err(Error::new)?;
 
-    let Some(row) = res else {
+    let Some(mut row) = res else {
         return Err(not_found(guild_id));
     };
+    row.preload_servers(&state.server_tracker, &mut *tx).await?;
 
     // Get guild room settings
     let guild_db_id = row.id;
-    let guild: Guild = row.try_into().map_err(Error::new)?;
+    let mut guild: Guild = row.try_into().map_err(Error::new)?;
 
     let new_settings = guild.settings.merge(request.settings.into());
     // Serialize settings
@@ -252,15 +248,8 @@ pub async fn update(
     .await
     .map_err(Error::new)?;
 
-    let mut guild = Guild {
-        id: guild.id,
-        servers: None,
-        created_at: guild.created_at,
-        updated_at: now,
-        settings: new_settings,
-    };
-
-    preload_servers(&mut guild, &state.server_tracker, &mut *tx).await?;
+    guild.settings = new_settings;
+    guild.updated_at = now;
 
     tx.commit().await.map_err(Error::new)?;
 

@@ -51,6 +51,23 @@ pub enum TeamMode {
     Four = 4,
 }
 
+impl TeamMode {
+    pub fn team_count(&self) -> usize {
+        match self {
+            TeamMode::FreeForAll => 1,
+            TeamMode::Two => 2,
+            TeamMode::Three => 3,
+            TeamMode::Four => 4,
+        }
+    }
+
+    /// Checks if a team mode can evenly divide teams.
+    pub fn has_even_teams(&self, player_count: usize) -> bool {
+        let team_count = self.team_count();
+        player_count % team_count == 0
+    }
+}
+
 /// An event format.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ToSchema)]
 pub struct EventFormat {

@@ -16,15 +16,11 @@ use mogidb_model::{
     room::{Room, RoomOptionsOverrides},
 };
 use serde::Deserialize;
+use sqlx::SqliteConnection;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState,
-    error::Error,
-    guild::{GuildEntity, preload_servers},
-    json::Json,
-    room::{get_room, preload_formats},
-    validate::Valid,
+    AppState, error::Error, guild::GuildEntity, json::Json, room::get_room, validate::Valid,
 };
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -140,12 +136,15 @@ pub async fn create(
     .fetch_optional(&mut *tx)
     .await
     .map_err(Error::new)?;
-    let Some(guild) = guild else {
+    let Some(mut guild) = guild else {
         return Err(Error::not_found(format_args!(
             "guild {} not found",
             guild_id
         )));
     };
+    guild
+        .preload_servers(&state.server_tracker, &mut *tx)
+        .await?;
 
     // Create room overrides
     let overrides = RoomOptionsOverrides::from(request.settings);
@@ -173,10 +172,8 @@ pub async fn create(
     .await
     .map_err(Error::new)?;
 
-    let mut guild = Guild::try_from(guild).map_err(Error::new)?;
-    preload_servers(&mut guild, &state.server_tracker, &mut *tx).await?;
-
-    let mut room = Room {
+    let guild = Guild::try_from(guild).map_err(Error::new)?;
+    let room = Room {
         id: request.room_id,
         name: request.name,
         enabled: request.enabled,
@@ -186,7 +183,6 @@ pub async fn create(
         created_at: now,
         updated_at: now,
     };
-    preload_formats(&mut room, &mut *tx).await?;
 
     tx.commit().await.map_err(Error::new)?;
 
@@ -228,11 +224,14 @@ pub async fn show(
         )));
     }
 
-    let room = get_room(guild_id, channel_id, &mut conn).await?;
-    let mut room = Room::try_from(room).map_err(Error::new)?;
+    let mut room = get_room(guild_id, channel_id, &mut conn).await?;
+    room.preload_formats_with_servers(&state.server_tracker, &mut conn)
+        .await?;
+    room.guild
+        .preload_servers(&state.server_tracker, &mut conn)
+        .await?;
 
-    preload_formats(&mut room, &mut *conn).await?;
-    preload_servers(&mut room.guild, &state.server_tracker, &mut *conn).await?;
+    let room = Room::try_from(room).map_err(Error::new)?;
 
     Ok(Json(room))
 }
@@ -278,13 +277,15 @@ pub async fn update(
     }
 
     // Get room
-    let room = get_room(guild_id, channel_id, &mut tx).await?;
+    let mut room = get_room(guild_id, channel_id, &mut tx).await?;
     let room_id = room.id;
+    room.preload_formats_with_servers(&state.server_tracker, &mut *tx)
+        .await?;
+    room.guild
+        .preload_servers(&state.server_tracker, &mut *tx)
+        .await?;
 
     let mut room = Room::try_from(room).map_err(Error::new)?;
-
-    preload_formats(&mut room, &mut *tx).await?;
-    preload_servers(&mut room.guild, &state.server_tracker, &mut *tx).await?;
 
     // Update settings
     if let Some(enabled) = request.enabled {
@@ -297,6 +298,7 @@ pub async fn update(
 
     // Update overrides (help)
     room.settings = request.update(room.settings);
+    room.updated_at = now;
 
     // Serialize
     let serialized = serde_json::to_string(&room.settings).map_err(Error::new)?;
@@ -388,4 +390,54 @@ pub async fn delete(
     } else {
         Err(Error::not_found(format_args!("room {} not found", room_id)))
     }
+}
+
+/// Fetches the room ID of a guild id and room id pair.
+///
+/// This returns an error if either guild or room cannot be found.
+async fn find_room(
+    guild_id: i64,
+    channel_id: i64,
+    conn: &mut SqliteConnection,
+) -> Result<i32, Error> {
+    // Check if guild exists
+    let res = sqlx::query_as::<_, (i32,)>(
+        r#"
+        SELECT g.id FROM guild g WHERE g.discord_guild_id = $1
+        "#,
+    )
+    .bind(guild_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(Error::new)?;
+    let Some((guild_id,)) = res else {
+        return Err(Error::not_found(format_args!(
+            "guild {} not found",
+            guild_id
+        )));
+    };
+
+    // Get room id
+    let res = sqlx::query_as::<_, (i32,)>(
+        r#"
+        SELECT r.id
+        FROM room r
+        WHERE
+            r.discord_channel_id = $1
+            AND r.parent_id = $2
+        "#,
+    )
+    .bind(channel_id)
+    .bind(guild_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(Error::new)?;
+    let Some((room_id,)) = res else {
+        return Err(Error::not_found(format_args!(
+            "room {} not found",
+            channel_id
+        )));
+    };
+
+    Ok(room_id)
 }

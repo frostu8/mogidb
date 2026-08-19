@@ -11,13 +11,12 @@ use garde::Validate;
 use mogidb_model::{error::ApiError, server::GameServer};
 
 use serde::Deserialize;
-use sqlx::FromRow;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState,
+    AppState, deserialize_some,
     error::{Error, ErrorKind},
-    guild::marshal_server_info,
+    guild::{get_server_by_id, marshal_server_info},
     json::Json,
     server::Error as ServerError,
     validate::Valid,
@@ -26,7 +25,7 @@ use crate::{
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
 pub struct CreateServerRequest {
-    /// The remote address of the server, in `host:port` form.
+    /// The remote address of the server, in `<hostname>:<port>` form.
     #[garde(custom(is_valid_remote))]
     pub remote: String,
     /// A user-defined label for the server. Falls back to the server name.
@@ -38,12 +37,25 @@ pub struct CreateServerRequest {
     pub note: Option<String>,
 }
 
-#[derive(FromRow)]
-struct ServerQuery {
-    pub id: i32,
-    pub remote: String,
-    pub label: String,
-    pub note: Option<String>,
+#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
+#[garde(context(AppState as state))]
+#[serde(default)]
+pub struct UpdateServerRequest {
+    /// A user-defined label for the server.
+    ///
+    /// Can be set to `null` to reset the server's label to the current server
+    /// name.
+    #[garde(length(min = 1))]
+    #[schema(nullable, min_length = 1)]
+    #[serde(deserialize_with = "deserialize_some")]
+    pub label: Option<Option<String>>,
+    /// A user-defined note for the server.
+    ///
+    /// Can be set to `null` to remove the note.
+    #[garde(length(min = 0))]
+    #[schema(nullable)]
+    #[serde(deserialize_with = "deserialize_some")]
+    pub note: Option<Option<String>>,
 }
 
 /// Adds a server to the register.
@@ -172,19 +184,15 @@ pub async fn show(
     Path((guild_id, server_id)): Path<(i64, i32)>,
     State(state): State<AppState>,
 ) -> Result<Json<GameServer>, Error> {
-    // Get guild
-    let guild = sqlx::query_as::<_, super::GuildEntity>(
-        r#"
-        SELECT *
-        FROM guild
-        WHERE discord_guild_id = $1
-        "#,
-    )
-    .bind(guild_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(Error::new)?;
-    let Some(guild) = guild else {
+    let mut conn = state.db.acquire().await.map_err(Error::new)?;
+
+    // Check if guild exists
+    let res = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
+        .bind(guild_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(Error::new)?;
+    let Some((guild_id,)) = res else {
         return Err(Error::not_found(format_args!(
             "guild {} not found",
             guild_id
@@ -192,45 +200,130 @@ pub async fn show(
     };
 
     // Get server
-    let server = sqlx::query_as::<_, ServerQuery>(
-        r#"
-        SELECT *
-        FROM server
-        WHERE guild_id = $1 AND id = $2
-        "#,
-    )
-    .bind(guild.id)
-    .bind(server_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(Error::new)?;
-    let Some(server) = server else {
+    let server = get_server_by_id(server_id, &mut *conn).await?;
+    let Some(mut server) = server else {
         return Err(Error::not_found(format_args!(
             "server {} not found",
             server_id
         )));
     };
 
+    // Check for guild id mismatch
+    if server.guild_id != guild_id {
+        return Err(Error::not_found(format_args!(
+            "server {} not found",
+            server_id
+        )));
+    }
+
     // Try to ping server
-    let res = match state.server_tracker.knock(&server.remote).await {
-        Ok(res) => Some(res),
-        // Request timed out, maybe the server is down?
-        // Fetch cached result
-        Err(ServerError::Timeout(_)) => state.server_tracker.get(&server.remote),
-        Err(ServerError::Packet(err)) => return Err(ErrorKind::Srb2Packet(err).into()),
-        Err(err) => return Err(Error::new(err)),
-    };
+    server.knock(&state.server_tracker).await?;
 
     // Return server
-    Ok(Json(GameServer {
-        id: server.id,
-        remote: server.remote,
-        label: server.label,
-        note: server.note,
-        last_update_time: res.as_ref().map(|res| res.last_ping_time),
-        info: res.map(marshal_server_info),
-        guild: Some(guild.try_into().map_err(Error::new)?),
-    }))
+    Ok(Json(GameServer::try_from(server).map_err(Error::new)?))
+}
+
+/// Updates a server.
+#[utoipa::path(
+    patch,
+    path = "/guilds/{guild_id}/servers/{server_id}",
+    tag = "server",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+        ("server_id" = i32, Path, description = "Server id"),
+    ),
+    request_body = UpdateServerRequest,
+    responses(
+        (status = OK, description = "The server", body = GameServer),
+        (status = NOT_FOUND, description = "Guild or server not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
+pub async fn update(
+    Path((guild_id, server_id)): Path<(i64, i32)>,
+    State(state): State<AppState>,
+    Valid(Json(request)): Valid<Json<UpdateServerRequest>>,
+) -> Result<Json<GameServer>, Error> {
+    let mut tx = state.db.begin().await.map_err(Error::new)?;
+    let now = Utc::now();
+
+    // Check if guild exists
+    let res = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
+        .bind(guild_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(Error::new)?;
+    let Some((guild_id,)) = res else {
+        return Err(Error::not_found(format_args!(
+            "guild {} not found",
+            guild_id
+        )));
+    };
+
+    // Get server
+    let server = get_server_by_id(server_id, &mut *tx).await?;
+    let Some(mut server) = server else {
+        return Err(Error::not_found(format_args!(
+            "server {} not found",
+            server_id
+        )));
+    };
+
+    // Check for guild id mismatch
+    if server.guild_id != guild_id {
+        return Err(Error::not_found(format_args!(
+            "server {} not found",
+            server_id
+        )));
+    }
+
+    // Try to ping server
+    let remote_server = server.knock(&state.server_tracker).await?;
+
+    // Update details
+    match request.label {
+        Some(Some(label)) => {
+            // Basic set operation.
+            server.label = label;
+        }
+        Some(None) => {
+            // Reset label, use server label
+            server.label = remote_server
+                .info
+                .server_name
+                .to_stripped_str()
+                .into_owned();
+        }
+        None => (), // Do nothing
+    }
+    if let Some(note) = request.note {
+        server.note = note;
+    }
+
+    // Update database
+    sqlx::query(
+        r#"
+        UPDATE server
+        SET
+            label = $3,
+            note = $4,
+            updated_at = $2
+        WHERE
+            id = $1
+        "#,
+    )
+    .bind(server.id)
+    .bind(now)
+    .bind(&server.label)
+    .bind(server.note.as_ref())
+    .execute(&mut *tx)
+    .await
+    .map_err(Error::new)?;
+
+    tx.commit().await.map_err(Error::new)?;
+
+    // Return server
+    Ok(Json(GameServer::try_from(server).map_err(Error::new)?))
 }
 
 /// Deletes a server.

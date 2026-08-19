@@ -2,7 +2,7 @@
 
 use mogidb_model::{
     error::ApiError,
-    event::FormatSelectionMode,
+    event::{EventFormat, FormatSelectionMode},
     guild::Guild,
     room::{Room, RoomOptions, RoomOptionsOverrides},
     server::{GameServer, GameSpeed, PlayerInfo, ServerInfo},
@@ -11,8 +11,11 @@ use utoipa::OpenApi;
 
 use crate::routes::guild::{
     self, CreateGuildRequest, UpdateGuildRequest, UpdateRoomSettings,
-    room::{CreateRoomRequest, UpdateRoomRequest},
-    server::CreateServerRequest,
+    room::{
+        CreateRoomRequest, UpdateRoomRequest,
+        format::{CreateEventFormatRequest, EventFormatsFilters, UpdateEventFormatRequest},
+    },
+    server::{CreateServerRequest, UpdateServerRequest},
 };
 
 /// OpenAPI documentation for `mogidb`.
@@ -32,7 +35,13 @@ use crate::routes::guild::{
         guild::room::delete,
         guild::server::create,
         guild::server::show,
+        guild::server::update,
         guild::server::delete,
+        guild::room::format::create,
+        guild::room::format::list,
+        guild::room::format::show,
+        guild::room::format::update,
+        guild::room::format::delete,
     ),
     components(schemas(
         ApiError,
@@ -41,6 +50,7 @@ use crate::routes::guild::{
         Room,
         RoomOptions,
         RoomOptionsOverrides,
+        EventFormat,
         GameServer,
         GameSpeed,
         PlayerInfo,
@@ -51,6 +61,10 @@ use crate::routes::guild::{
         CreateRoomRequest,
         UpdateRoomRequest,
         CreateServerRequest,
+        UpdateServerRequest,
+        CreateEventFormatRequest,
+        UpdateEventFormatRequest,
+        EventFormatsFilters,
     )),
     tags(
         (name = "guild", description = "Guild management"),

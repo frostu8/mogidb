@@ -8,7 +8,7 @@ use std::{
 
 use axum::{
     Json,
-    extract::rejection::JsonRejection,
+    extract::rejection::{FormRejection, JsonRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -158,6 +158,9 @@ pub enum ErrorKind {
     /// A JSON rejection.
     #[display("{_0}")]
     Json(JsonRejection),
+    /// A Form rejection.
+    #[display("{_0}")]
+    Form(FormRejection),
     /// An error occured during SRB2 communications.
     #[display("{_0}")]
     Srb2Packet(packet::Error),
@@ -173,6 +176,9 @@ pub enum ErrorKind {
     /// An attempt was made to create a server with a remote already used.
     #[display("remote server {_0} already exists")]
     RemoteExists(String),
+    /// Cannot assign a non-existant server (or list of servers) to a format.
+    #[display("server(s) with ids {_0:?} do not exist")]
+    InvalidServerIds(Vec<i32>),
     /// Some other internal error.
     #[from(ignore)]
     Other(eyre::Error),
