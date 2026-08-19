@@ -29,6 +29,12 @@ async fn main() -> eyre::Result<()> {
     let app_state = AppState::new(config).await?;
     let app = Router::new()
         .nest(
+            "/users",
+            Router::new()
+                .route("/{user_id}", get(mogidb::routes::user::show))
+                .route("/{user_id}", put(mogidb::routes::user::upsert)),
+        )
+        .nest(
             "/guilds",
             Router::new()
                 .route("/", post(mogidb::routes::guild::create))
@@ -44,12 +50,6 @@ async fn main() -> eyre::Result<()> {
                             "/{server_id}",
                             delete(mogidb::routes::guild::server::delete),
                         ),
-                )
-                .nest(
-                    "/{guild_id}/users",
-                    Router::new()
-                        .route("/{user_id}", get(mogidb::routes::guild::user::show))
-                        .route("/{user_id}", put(mogidb::routes::guild::user::upsert)),
                 )
                 .nest(
                     "/{guild_id}/rooms",

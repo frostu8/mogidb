@@ -14,7 +14,6 @@ const MAX_INSERT_ATTEMPTS: i32 = 8;
 #[derive(Clone, Debug, FromRow)]
 pub struct UserEntity {
     pub id: i32,
-    pub guild_id: i32,
     pub short_id: String,
     pub display_name: String,
     #[sqlx(try_from = "i32")]
@@ -38,7 +37,6 @@ impl From<UserEntity> for User {
 /// A builder for a user.
 #[derive(Debug)]
 pub struct UserBuilder {
-    guild_id: i32,
     display_name: String,
     flags: UserFlags,
     discord_user_id: Option<i64>,
@@ -46,9 +44,8 @@ pub struct UserBuilder {
 
 impl UserBuilder {
     /// Creates a new `UserBuilder`.
-    pub fn new(guild_id: i32, display_name: impl Into<String>) -> UserBuilder {
+    pub fn new(display_name: impl Into<String>) -> UserBuilder {
         UserBuilder {
-            guild_id,
             display_name: display_name.into(),
             flags: UserFlags::empty(),
             discord_user_id: None,
@@ -104,16 +101,14 @@ impl UserBuilder {
                     (
                         inserted_at,
                         updated_at,
-                        guild_id,
                         short_id,
                         display_name,
                         flags,
                         discord_user_id
                     )
-                VALUES ($1, $1, $2, $3, $4, $5, $6)
+                VALUES ($1, $1, $2, $3, $4, $5)
                 RETURNING
                     id,
-                    guild_id,
                     short_id,
                     display_name,
                     flags,
@@ -123,7 +118,6 @@ impl UserBuilder {
                 "#,
             )
             .bind(now)
-            .bind(self.guild_id)
             .bind(&short_id)
             .bind(&self.display_name)
             .bind(i32::from(self.flags))
@@ -150,7 +144,6 @@ impl UserBuilder {
 
 /// Gets a user by their discord ID and guild ID.
 pub async fn get_user_by_discord_id(
-    guild_id: i32,
     discord_user_id: i64,
     conn: &mut SqliteConnection,
 ) -> Result<Option<UserEntity>, Error> {
@@ -158,10 +151,9 @@ pub async fn get_user_by_discord_id(
         r#"
         SELECT *
         FROM user
-        WHERE guild_id = $1 AND discord_user_id = $2
+        WHERE discord_user_id = $1
         "#,
     )
-    .bind(guild_id)
     .bind(discord_user_id)
     .fetch_optional(&mut *conn)
     .await

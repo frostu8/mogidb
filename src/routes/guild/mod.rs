@@ -2,7 +2,6 @@
 
 pub mod room;
 pub mod server;
-pub mod user;
 
 use axum::extract::{Path, State};
 
@@ -130,7 +129,7 @@ pub async fn create(
             settings: settings,
         })),
         // Guild already exists
-        Err(sqlx::Error::Database(err)) if err.is_unique_violation() => Err(Error::exists(
+        Err(sqlx::Error::Database(err)) if err.is_unique_violation() => Err(Error::conflict(
             format_args!("guild {} already exists", request.guild_id),
         )),
         Err(err) => Err(Error::new(err)),

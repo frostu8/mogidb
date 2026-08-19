@@ -294,6 +294,7 @@ pub async fn update(
     let remote_server = server.knock(&state.server_tracker).await?;
 
     // Update details
+    let mut generated_label = false;
     match request.label {
         Some(Some(label)) => {
             // Basic set operation.
@@ -301,6 +302,7 @@ pub async fn update(
         }
         Some(None) => {
             // Reset label, use server label
+            generated_label = true;
             server.label = remote_server
                 .info
                 .server_name
@@ -336,7 +338,12 @@ pub async fn update(
         // Conflicting label? Tell end user
         // This can't trip the remote unique constraint.
         Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
-            return Err(ErrorKind::LabelInUse(server.label.clone()).into());
+            // A server with that label already exists.
+            if generated_label {
+                return Err(ErrorKind::UndefinedLabel.into());
+            } else {
+                return Err(ErrorKind::LabelInUse(server.label.clone()).into());
+            }
         }
         // rethrow
         Err(err) => return Err(Error::new(err)),

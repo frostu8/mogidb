@@ -31,10 +31,9 @@ pub struct UpsertUserRequest {
 /// A route used to upsert users into the MogiDB.
 #[utoipa::path(
     put,
-    path = "/guilds/{guild_id}/users/{discord_user_id}",
+    path = "/users/{discord_user_id}",
     tag = "user",
     params(
-        ("guild_id" = i64, Path, description = "Discord guild id"),
         ("discord_user_id" = i64, Path, description = "Discord user id"),
     ),
     request_body = UpsertUserRequest,
@@ -46,27 +45,15 @@ pub struct UpsertUserRequest {
     )
 )]
 pub async fn upsert(
-    Path((guild_id, discord_user_id)): Path<(i64, i64)>,
+    Path((discord_user_id,)): Path<(i64,)>,
     State(state): State<AppState>,
     Valid(Json(request)): Valid<Json<UpsertUserRequest>>,
 ) -> Result<(StatusCode, Json<User>), Error> {
     let mut tx = state.db.begin().await.map_err(Error::new)?;
     let now = Utc::now();
 
-    let res = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
-        .bind(guild_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(Error::new)?;
-    let Some((guild_id,)) = res else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id,
-        )));
-    };
-
     // Try to find user first
-    let user = get_user_by_discord_id(guild_id, discord_user_id, &mut *tx).await?;
+    let user = get_user_by_discord_id(discord_user_id, &mut *tx).await?;
     if let Some(mut user) = user {
         let mut should_update = false;
         // Check if fields need updating
@@ -97,7 +84,7 @@ pub async fn upsert(
         Ok((StatusCode::OK, Json(User::from(user))))
     } else {
         // Try to create user
-        let user = UserBuilder::new(guild_id, &request.display_name)
+        let user = UserBuilder::new(&request.display_name)
             .discord_user_id(discord_user_id)
             .create(&mut *tx)
             .await?;
@@ -111,10 +98,9 @@ pub async fn upsert(
 /// Fetches the user with the given short ID.
 #[utoipa::path(
     get,
-    path = "/guilds/{guild_id}/users/{user_id}",
+    path = "/users/{user_id}",
     tag = "user",
     params(
-        ("guild_id" = i64, Path, description = "Discord guild id"),
         ("user_id" = String, Path, description = "The id of the user"),
     ),
     responses(
@@ -124,32 +110,15 @@ pub async fn upsert(
     )
 )]
 pub async fn show(
-    Path((guild_id, user_id)): Path<(i64, String)>,
+    Path((user_id,)): Path<(String,)>,
     State(state): State<AppState>,
 ) -> Result<Json<User>, Error> {
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
-
-    let res = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
-        .bind(guild_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(Error::new)?;
-    let Some((guild_id,)) = res else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id,
-        )));
-    };
 
     let user = get_user(&user_id, &mut *conn).await?;
     let Some(user) = user else {
         return Err(Error::not_found(format_args!("user {} not found", user_id)));
     };
-
-    // Check for mismatched guild IDs
-    if guild_id != user.guild_id {
-        return Err(Error::not_found(format_args!("user {} not found", user_id)));
-    }
 
     Ok(Json(User::from(user)))
 }

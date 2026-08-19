@@ -10,14 +10,16 @@ use mogidb_model::{
 };
 use utoipa::OpenApi;
 
-use crate::routes::guild::{
-    self, CreateGuildRequest, UpdateGuildRequest, UpdateRoomSettings,
-    room::{
-        CreateRoomRequest, UpdateRoomRequest,
-        format::{CreateEventFormatRequest, EventFormatsFilters, UpdateEventFormatRequest},
+use crate::routes::{
+    guild::{
+        self, CreateGuildRequest, UpdateGuildRequest, UpdateRoomSettings,
+        room::{
+            CreateRoomRequest, UpdateRoomRequest,
+            format::{CreateEventFormatRequest, EventFormatsFilters, UpdateEventFormatRequest},
+        },
+        server::{CreateServerRequest, UpdateServerRequest},
     },
-    server::{CreateServerRequest, UpdateServerRequest},
-    user::UpsertUserRequest,
+    user::{self, UpsertUserRequest},
 };
 
 /// OpenAPI documentation for `mogidb`.
@@ -28,11 +30,11 @@ use crate::routes::guild::{
         description = "Gutbuster backend database and API."
     ),
     paths(
+        user::upsert,
+        user::show,
         guild::create,
         guild::show,
         guild::update,
-        guild::user::upsert,
-        guild::user::show,
         guild::room::create,
         guild::room::show,
         guild::room::update,

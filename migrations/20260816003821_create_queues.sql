@@ -1,7 +1,6 @@
--- There are many users for each guild.
+-- There are many users.
 CREATE TABLE user (
     id INTEGER PRIMARY KEY,
-    guild_id INTEGER NOT NULL REFERENCES guild(id),
     -- A short ID used to uniquely identify a user.
     short_id CHAR(6) UNIQUE NOT NULL,
     display_name VARCHAR(255) NOT NULL,

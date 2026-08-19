@@ -50,11 +50,11 @@ impl Error {
     }
 
     /// Creates an exists error.
-    pub fn exists<T>(msg: T) -> Error
+    pub fn conflict<T>(msg: T) -> Error
     where
         T: Display,
     {
-        Error::from(ErrorKind::Exists).message(msg)
+        Error::from(ErrorKind::Conflict).message(msg)
     }
 
     pub fn message<T>(self, msg: T) -> Error
@@ -69,6 +69,12 @@ impl Error {
 
     fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
         let (status, mut error) = match self.kind {
+            ErrorKind::NotFound => (
+                StatusCode::NOT_FOUND,
+                ApiError {
+                    message: "resource does not exist".into(),
+                },
+            ),
             ErrorKind::InvalidValue(err) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
@@ -81,37 +87,15 @@ impl Error {
                     message: err.to_string(),
                 },
             ),
-            ErrorKind::NotFound => (
-                StatusCode::NOT_FOUND,
-                ApiError {
-                    message: "resource does not exist".into(),
-                },
-            ),
-            ErrorKind::Exists => (
-                StatusCode::BAD_REQUEST,
-                ApiError {
-                    message: "a resource with that id already exists".into(),
-                },
-            ),
-            ErrorKind::UndefinedLabel => (
-                StatusCode::BAD_REQUEST,
-                ApiError {
-                    message: "server label not defined".into(),
-                },
-            ),
-            ErrorKind::RemoteExists(remote) => (
-                StatusCode::BAD_REQUEST,
-                ApiError {
-                    message: format!("remote {} already exists", remote),
-                },
-            ),
-            err @ ErrorKind::LabelInUse(_) => (
-                StatusCode::BAD_REQUEST,
+            err @ ErrorKind::LabelInUse(_)
+            | err @ ErrorKind::Conflict
+            | err @ ErrorKind::RemoteExists(_) => (
+                StatusCode::CONFLICT,
                 ApiError {
                     message: err.to_string(),
                 },
             ),
-            err @ ErrorKind::InvalidServerIds(_) => (
+            err @ ErrorKind::InvalidServerIds(_) | err @ ErrorKind::UndefinedLabel => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: err.to_string(),
@@ -184,7 +168,7 @@ pub enum ErrorKind {
     NotFound,
     /// A resource with that identifier already exists.
     #[display("entity already exists")]
-    Exists,
+    Conflict,
     /// An attempt was made to create a server with a remote already used.
     #[display("remote server {_0} already exists")]
     #[from(ignore)]
