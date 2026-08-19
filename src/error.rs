@@ -176,6 +176,9 @@ pub enum ErrorKind {
     /// An attempt was made to create a server with a remote already used.
     #[display("remote server {_0} already exists")]
     RemoteExists(String),
+    /// Cannot use a label that is already in-use.
+    #[display("label \"{_0}\" in use")]
+    LabelInUse(String),
     /// Cannot assign a non-existant server (or list of servers) to a format.
     #[display("server(s) with ids {_0:?} do not exist")]
     InvalidServerIds(Vec<i32>),

@@ -36,7 +36,8 @@ CREATE TABLE server (
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
 
-    UNIQUE (guild_id, label)
+    CONSTRAINT unique_label UNIQUE (guild_id, label),
+    CONSTRAINT unique_remote UNIQUE (guild_id, remote)
 );
 
 -- Each room has >0 formats.

@@ -115,13 +115,15 @@ pub async fn create(
     };
 
     // Use user-defined label, or use server name for label.
-    let label = request
+    let (label, generated_label) = request
         .label
         .take()
+        .map(|label| (label, false))
         .or_else(|| {
             server_state
                 .as_ref()
                 .map(|res| res.info.server_name.to_stripped_str().into_owned())
+                .map(|label| (label, true))
         })
         .ok_or_else(|| ErrorKind::UndefinedLabel)?;
 
@@ -145,8 +147,19 @@ pub async fn create(
     let (id,) = match result {
         Ok(res) => res,
         Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
-            // The server with that remote already exists
-            return Err(ErrorKind::RemoteExists(request.remote.clone()).into());
+            if err.constraint() == Some("unique_remote") {
+                // The server with that remote already exists
+                return Err(ErrorKind::RemoteExists(request.remote.clone()).into());
+            } else if err.constraint() == Some("unique_label") {
+                // A server with that label already exists.
+                if generated_label {
+                    return Err(ErrorKind::UndefinedLabel.into());
+                } else {
+                    return Err(ErrorKind::LabelInUse(label).into());
+                }
+            } else {
+                unreachable!()
+            }
         }
         Err(err) => return Err(Error::new(err)),
     };
@@ -301,7 +314,7 @@ pub async fn update(
     }
 
     // Update database
-    sqlx::query(
+    let result = sqlx::query(
         r#"
         UPDATE server
         SET
@@ -317,8 +330,17 @@ pub async fn update(
     .bind(&server.label)
     .bind(server.note.as_ref())
     .execute(&mut *tx)
-    .await
-    .map_err(Error::new)?;
+    .await;
+    match result {
+        Ok(_res) => (),
+        // Conflicting label? Tell end user
+        // This can't trip the remote unique constraint.
+        Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
+            return Err(ErrorKind::LabelInUse(server.label.clone()).into());
+        }
+        // rethrow
+        Err(err) => return Err(Error::new(err)),
+    }
 
     tx.commit().await.map_err(Error::new)?;
 
