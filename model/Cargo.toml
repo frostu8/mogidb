@@ -9,6 +9,7 @@ num_enum = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true }
 serde_repr = { workspace = true }
-serde_with = { workspace = true }
+serde_with.workspace = true
 derive_more = { workspace = true, features = ["display", "error", "deref", "from"] }
 utoipa = { workspace = true }
+bytemuck.workspace = true

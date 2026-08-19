@@ -2,6 +2,7 @@
 
 pub mod room;
 pub mod server;
+pub mod user;
 
 use axum::extract::{Path, State};
 

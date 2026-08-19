@@ -105,6 +105,18 @@ impl Error {
                     message: format!("remote {} already exists", remote),
                 },
             ),
+            err @ ErrorKind::LabelInUse(_) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: err.to_string(),
+                },
+            ),
+            err @ ErrorKind::InvalidServerIds(_) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: err.to_string(),
+                },
+            ),
             _err => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiError {
@@ -175,13 +187,18 @@ pub enum ErrorKind {
     Exists,
     /// An attempt was made to create a server with a remote already used.
     #[display("remote server {_0} already exists")]
+    #[from(ignore)]
     RemoteExists(String),
     /// Cannot use a label that is already in-use.
     #[display("label \"{_0}\" in use")]
+    #[from(ignore)]
     LabelInUse(String),
     /// Cannot assign a non-existant server (or list of servers) to a format.
     #[display("server(s) with ids {_0:?} do not exist")]
     InvalidServerIds(Vec<i32>),
+    /// The server ran out of IDs while generating a new entity.
+    #[display("server out of ids")]
+    OutOfIds,
     /// Some other internal error.
     #[from(ignore)]
     Other(eyre::Error),

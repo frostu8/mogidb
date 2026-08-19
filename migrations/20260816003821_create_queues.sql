@@ -1,9 +1,12 @@
 -- There are many users for each guild.
 CREATE TABLE user (
     id INTEGER PRIMARY KEY,
+    guild_id INTEGER NOT NULL REFERENCES guild(id),
     -- A short ID used to uniquely identify a user.
     short_id CHAR(6) UNIQUE NOT NULL,
     display_name VARCHAR(255) NOT NULL,
+    -- A set of flags for the user.
+    flags INTEGER NOT NULL DEFAULT 0,
     -- The user's discord snowflake.
     discord_user_id BIGINT,
     inserted_at TIMESTAMP NOT NULL,

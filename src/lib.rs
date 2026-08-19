@@ -9,6 +9,7 @@ pub mod json;
 pub mod room;
 pub mod routes;
 pub mod server;
+pub mod user;
 pub mod validate;
 
 use std::sync::Arc;

@@ -6,6 +6,7 @@ use mogidb_model::{
     guild::Guild,
     room::{Room, RoomOptions, RoomOptionsOverrides},
     server::{GameServer, GameSpeed, PlayerInfo, ServerInfo},
+    user::{User, UserFlags},
 };
 use utoipa::OpenApi;
 
@@ -16,6 +17,7 @@ use crate::routes::guild::{
         format::{CreateEventFormatRequest, EventFormatsFilters, UpdateEventFormatRequest},
     },
     server::{CreateServerRequest, UpdateServerRequest},
+    user::UpsertUserRequest,
 };
 
 /// OpenAPI documentation for `mogidb`.
@@ -29,6 +31,8 @@ use crate::routes::guild::{
         guild::create,
         guild::show,
         guild::update,
+        guild::user::upsert,
+        guild::user::show,
         guild::room::create,
         guild::room::show,
         guild::room::update,
@@ -55,6 +59,8 @@ use crate::routes::guild::{
         GameSpeed,
         PlayerInfo,
         ServerInfo,
+        User,
+        UserFlags,
         CreateGuildRequest,
         UpdateGuildRequest,
         UpdateRoomSettings,
@@ -64,12 +70,14 @@ use crate::routes::guild::{
         UpdateServerRequest,
         CreateEventFormatRequest,
         UpdateEventFormatRequest,
+        UpsertUserRequest,
         EventFormatsFilters,
     )),
     tags(
         (name = "guild", description = "Guild management"),
         (name = "room", description = "Room management"),
         (name = "server", description = "Game server management"),
+        (name = "user", description = "User management"),
     )
 )]
 pub struct ApiDoc;

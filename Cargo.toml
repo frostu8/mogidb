@@ -30,6 +30,7 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 clap = { version = "4", features = ["derive"] }
 serde_norway = "0.9.42"
+rand = "0.10.2"
 
 [workspace]
 resolver = "3"

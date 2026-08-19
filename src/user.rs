@@ -1,0 +1,187 @@
+//! User operations.
+
+use chrono::{DateTime, Utc};
+use mogidb_model::user::{User, UserFlags};
+
+use rand::{Rng, RngExt as _, SeedableRng as _, distr::Alphanumeric};
+
+use sqlx::{FromRow, SqliteConnection};
+
+use crate::error::{Error, ErrorKind};
+
+const MAX_INSERT_ATTEMPTS: i32 = 8;
+
+#[derive(Clone, Debug, FromRow)]
+pub struct UserEntity {
+    pub id: i32,
+    pub guild_id: i32,
+    pub short_id: String,
+    pub display_name: String,
+    #[sqlx(try_from = "i32")]
+    pub flags: UserFlags,
+    pub discord_user_id: Option<i64>,
+    pub inserted_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<UserEntity> for User {
+    fn from(value: UserEntity) -> Self {
+        User {
+            id: value.short_id,
+            display_name: value.display_name,
+            discord_user_id: value.discord_user_id,
+            flags: value.flags,
+        }
+    }
+}
+
+/// A builder for a user.
+#[derive(Debug)]
+pub struct UserBuilder {
+    guild_id: i32,
+    display_name: String,
+    flags: UserFlags,
+    discord_user_id: Option<i64>,
+}
+
+impl UserBuilder {
+    /// Creates a new `UserBuilder`.
+    pub fn new(guild_id: i32, display_name: impl Into<String>) -> UserBuilder {
+        UserBuilder {
+            guild_id,
+            display_name: display_name.into(),
+            flags: UserFlags::empty(),
+            discord_user_id: None,
+        }
+    }
+
+    /// Sets the new user's flags.
+    pub fn flags(self, flags: UserFlags) -> UserBuilder {
+        UserBuilder { flags, ..self }
+    }
+
+    /// Sets the discord ID of the user.
+    pub fn discord_user_id(self, id: i64) -> UserBuilder {
+        UserBuilder {
+            discord_user_id: Some(id),
+            ..self
+        }
+    }
+
+    /// Creates the user.
+    pub async fn create(self, conn: &mut SqliteConnection) -> Result<UserEntity, Error> {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(rand::random());
+        self.create_with(conn, &mut rng).await
+    }
+
+    /// Creates the user with a given PRNG.
+    pub async fn create_with<R>(
+        self,
+        conn: &mut SqliteConnection,
+        rng: &mut R,
+    ) -> Result<UserEntity, Error>
+    where
+        R: Rng,
+    {
+        let now = Utc::now();
+
+        // this is a new player
+        let mut inserted_user = None::<UserEntity>;
+
+        for _ in 0..MAX_INSERT_ATTEMPTS {
+            // generate a short id
+            let short_id = rng
+                .sample_iter(Alphanumeric)
+                .take(6)
+                .map(char::from)
+                .map(|c| char::to_ascii_uppercase(&c))
+                .collect::<String>();
+
+            // try to insert with short_id
+            let result = sqlx::query_as::<_, UserEntity>(
+                r#"
+                INSERT INTO user
+                    (
+                        inserted_at,
+                        updated_at,
+                        guild_id,
+                        short_id,
+                        display_name,
+                        flags,
+                        discord_user_id
+                    )
+                VALUES ($1, $1, $2, $3, $4, $5, $6)
+                RETURNING
+                    id,
+                    guild_id,
+                    short_id,
+                    display_name,
+                    flags,
+                    discord_user_id,
+                    inserted_at,
+                    updated_at
+                "#,
+            )
+            .bind(now)
+            .bind(self.guild_id)
+            .bind(&short_id)
+            .bind(&self.display_name)
+            .bind(i32::from(self.flags))
+            .bind(self.discord_user_id)
+            .fetch_one(&mut *conn)
+            .await;
+
+            match result {
+                Ok(user) => {
+                    inserted_user = Some(user);
+                    break;
+                }
+                Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
+                    // if this is a unique violation, simply try again
+                    tracing::debug!("unique key {} failed, regenerating", short_id);
+                }
+                Err(err) => return Err(Error::new(err)),
+            }
+        }
+
+        inserted_user.ok_or_else(|| ErrorKind::OutOfIds.into())
+    }
+}
+
+/// Gets a user by their discord ID and guild ID.
+pub async fn get_user_by_discord_id(
+    guild_id: i32,
+    discord_user_id: i64,
+    conn: &mut SqliteConnection,
+) -> Result<Option<UserEntity>, Error> {
+    sqlx::query_as::<_, UserEntity>(
+        r#"
+        SELECT *
+        FROM user
+        WHERE guild_id = $1 AND discord_user_id = $2
+        "#,
+    )
+    .bind(guild_id)
+    .bind(discord_user_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(Error::new)
+}
+
+/// Gets a user by their short ID.
+pub async fn get_user(
+    short_id: &str,
+    conn: &mut SqliteConnection,
+) -> Result<Option<UserEntity>, Error> {
+    sqlx::query_as::<_, UserEntity>(
+        r#"
+        SELECT *
+        FROM user
+        WHERE short_id = $1
+        "#,
+    )
+    .bind(short_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(Error::new)
+}
