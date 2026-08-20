@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// A format entity.
-#[derive(Debug, FromRow)]
+#[derive(Clone, Debug, FromRow)]
 pub struct EventFormatEntity {
     pub id: i32,
     pub room_id: i32,
@@ -152,7 +152,7 @@ impl EventFormatEntity {
 }
 
 /// Gets a format by its ID.
-pub async fn get_format_by_id(
+pub async fn get_format(
     id: i32,
     conn: &mut SqliteConnection,
 ) -> Result<Option<EventFormatEntity>, Error> {

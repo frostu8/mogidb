@@ -1,69 +1,53 @@
 pub mod format;
 
 use chrono::{DateTime, Utc};
-use mogidb_model::room::{Room, RoomOptionsOverrides};
-use sqlx::{FromRow, Row, SqliteConnection, sqlite::SqliteRow};
+use derive_more::Display;
+use mogidb_model::{
+    guild::Guild,
+    room::{Room, RoomOptionsOverrides},
+};
+use sqlx::{FromRow, SqliteConnection};
 
 use crate::{
-    error::Error, guild::GuildEntity, room::format::EventFormatEntity, server::ServerTracker,
+    error::{Error, OptionExt as _},
+    guild::{GuildEntity, get_guild},
+    room::format::EventFormatEntity,
+    server::ServerTracker,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug, FromRow)]
 pub struct RoomEntity {
     pub id: i32,
     pub discord_channel_id: i64,
     pub name: String,
     pub enabled: bool,
-    pub overrides: String,
+    #[sqlx(json)]
+    pub overrides: RoomOptionsOverrides,
     pub inserted_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
     // Preload fields
-    pub guild: GuildEntity,
+    #[sqlx(skip)]
+    pub guild: Option<GuildEntity>,
+    #[sqlx(skip)]
     pub formats: Option<Vec<EventFormatEntity>>,
 }
 
-impl FromRow<'_, SqliteRow> for RoomEntity {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        Ok(RoomEntity {
-            id: row.try_get("id")?,
-            discord_channel_id: row.try_get("discord_channel_id")?,
-            name: row.try_get("name")?,
-            enabled: row.try_get("enabled")?,
-            overrides: row.try_get("overrides")?,
-            inserted_at: row.try_get("inserted_at")?,
-            updated_at: row.try_get("updated_at")?,
-            guild: GuildEntity {
-                id: row.try_get("guild_id")?,
-                discord_guild_id: row.try_get("discord_guild_id")?,
-                settings: row.try_get("guild_settings")?,
-                inserted_at: row.try_get("guild_inserted_at")?,
-                updated_at: row.try_get("guild_updated_at")?,
-                servers: None,
-            },
-            formats: None,
-        })
-    }
-}
-
 impl TryFrom<RoomEntity> for Room {
-    type Error = serde_json::Error;
+    type Error = MissingGuild;
 
     fn try_from(value: RoomEntity) -> Result<Self, Self::Error> {
         Ok(Room {
             id: value.discord_channel_id,
             name: value.name,
             enabled: value.enabled,
-            settings: serde_json::from_str::<RoomOptionsOverrides>(&value.overrides)?,
+            settings: value.overrides,
             created_at: value.inserted_at,
             updated_at: value.updated_at,
-            guild: value.guild.try_into()?,
+            guild: value.guild.map(Guild::from).ok_or(MissingGuild)?,
             formats: value
                 .formats
-                .unwrap_or_else(Vec::new)
-                .into_iter()
-                .map(From::from)
-                .collect::<Vec<_>>(),
+                .map(|v| v.into_iter().map(From::from).collect::<Vec<_>>()),
         })
     }
 }
@@ -95,59 +79,42 @@ impl RoomEntity {
     }
 }
 
+#[derive(Debug, Display)]
+#[display("missing embedded guild when converting to API model")]
+pub struct MissingGuild;
+
+impl std::error::Error for MissingGuild {}
+
 /// Gets a room by its `discord_channel_id` and parent guild `guild_id`.
 pub async fn get_room(
     discord_guild_id: i64,
     discord_channel_id: i64,
     conn: &mut SqliteConnection,
-) -> Result<RoomEntity, Error> {
-    // Check if guild exists
-    let (no,) = sqlx::query_as::<_, (i32,)>(
-        r#"
-        SELECT COUNT(*) FROM guild g WHERE g.discord_guild_id = $1
-        "#,
-    )
-    .bind(discord_guild_id)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(Error::new)?;
-    if no == 0 {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            discord_guild_id
-        )));
-    }
+) -> Result<Option<RoomEntity>, Error> {
+    // Get guild
+    let guild = get_guild(discord_guild_id, &mut *conn)
+        .await?
+        .ok_or_not_found()?;
 
-    // Get guild and room
-    let row = sqlx::query_as::<_, RoomEntity>(
+    // Get room
+    sqlx::query_as::<_, RoomEntity>(
         r#"
-        SELECT
-            r.*,
-            g.id AS guild_id,
-            g.settings AS guild_settings,
-            g.discord_guild_id,
-            g.inserted_at AS guild_inserted_at,
-            g.updated_at AS guild_updated_at
-        FROM room r, guild g
-        WHERE
-            discord_guild_id = $1
-            AND discord_channel_id = $2
-            AND r.parent_id = g.id
+        SELECT r.*
+        FROM room r
+        WHERE r.parent_id = $1 AND r.discord_channel_id = $2
         "#,
     )
-    .bind(discord_guild_id)
+    .bind(guild.id)
     .bind(discord_channel_id)
     .fetch_optional(&mut *conn)
     .await
-    .map_err(Error::new)?;
-    let Some(room) = row else {
-        return Err(Error::not_found(format_args!(
-            "room {} not found",
-            discord_channel_id
-        )));
-    };
-
-    Ok(room)
+    .map_err(Error::new)
+    .map(|room| {
+        room.map(|room| RoomEntity {
+            guild: Some(guild),
+            ..room
+        })
+    })
 }
 
 /// Lists all formats associated with a room.

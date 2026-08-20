@@ -42,7 +42,7 @@ CREATE TABLE event_participant (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES user(id),
     event_id INTEGER NOT NULL REFERENCES event(id),
-    assigned_team INTEGER,
+    team_number INTEGER,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
 

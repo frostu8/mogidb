@@ -60,6 +60,12 @@ async fn main() -> eyre::Result<()> {
                         .route("/{room_id}", delete(mogidb::routes::guild::room::delete)),
                 )
                 .nest(
+                    "/{guild_id}/rooms/{room_id}/events",
+                    Router::new()
+                        .route("/", post(mogidb::routes::guild::room::event::create))
+                        .route("/{event_id}", get(mogidb::routes::guild::room::event::show)),
+                )
+                .nest(
                     "/{guild_id}/rooms/{room_id}/formats",
                     Router::new()
                         .route("/", get(mogidb::routes::guild::room::format::list))

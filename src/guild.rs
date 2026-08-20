@@ -10,22 +10,22 @@ use mogidb_model::{
     server::{GameServer, PlayerInfo, ServerInfo},
 };
 
-use sqlx::{FromRow, Row, SqliteConnection, sqlite::SqliteRow};
+use sqlx::{FromRow, SqliteConnection};
 
 use crate::{
     error::{Error, ErrorKind},
     server::{Error as ServerError, KnockResult, ServerTracker},
 };
 
-#[derive(Debug, FromRow)]
+#[derive(Clone, Debug, FromRow)]
 pub struct GuildEntity {
     pub id: i32,
     pub discord_guild_id: i64,
-    pub settings: String,
+    #[sqlx(json)]
+    pub settings: RoomOptions,
     pub inserted_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
-    // Preload fields
     #[sqlx(skip)]
     pub servers: Option<Vec<ServerEntity>>,
 }
@@ -47,7 +47,7 @@ impl GuildEntity {
                 AND g.discord_guild_id = $1
             "#,
         )
-        .bind(self.id)
+        .bind(self.discord_guild_id)
         .fetch_all(&mut *conn)
         .await
         .map_err(Error::new)?;
@@ -71,29 +71,24 @@ impl GuildEntity {
     }
 }
 
-impl TryFrom<GuildEntity> for Guild {
-    type Error = serde_json::Error;
-
-    fn try_from(value: GuildEntity) -> Result<Self, Self::Error> {
-        Ok(Guild {
+impl From<GuildEntity> for Guild {
+    fn from(value: GuildEntity) -> Self {
+        Guild {
             id: value.discord_guild_id,
-            settings: serde_json::from_str::<RoomOptions>(&value.settings)?,
-            servers: value
-                .servers
-                .map(|servers| {
-                    servers
-                        .into_iter()
-                        .map(GameServer::try_from)
-                        .collect::<Result<Vec<_>, serde_json::Error>>()
-                })
-                .transpose()?,
+            settings: value.settings,
+            servers: value.servers.map(|servers| {
+                servers
+                    .into_iter()
+                    .map(GameServer::from)
+                    .collect::<Vec<_>>()
+            }),
             created_at: value.inserted_at,
             updated_at: value.updated_at,
-        })
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, FromRow)]
 pub struct ServerEntity {
     pub id: i32,
     pub guild_id: i32,
@@ -104,9 +99,11 @@ pub struct ServerEntity {
     pub updated_at: DateTime<Utc>,
 
     // Preload fields
+    #[sqlx(skip)]
     pub guild: Option<GuildEntity>,
 
     // Knock result
+    #[sqlx(skip)]
     pub remote_server: Option<KnockResult>,
 }
 
@@ -128,88 +125,48 @@ impl ServerEntity {
     }
 }
 
-impl TryFrom<ServerEntity> for GameServer {
-    type Error = serde_json::Error;
-
-    fn try_from(value: ServerEntity) -> Result<Self, Self::Error> {
-        let guild = match value.guild {
-            Some(guild) => Some(Guild::try_from(guild)?),
-            None => None,
-        };
-
-        Ok(GameServer {
+impl From<ServerEntity> for GameServer {
+    fn from(value: ServerEntity) -> Self {
+        GameServer {
             id: value.id,
             remote: value.remote,
             label: value.label,
             note: value.note,
             last_update_time: value.remote_server.as_ref().map(|res| res.last_ping_time),
             info: value.remote_server.map(marshal_server_info),
-            guild,
-        })
+            guild: value.guild.map(Guild::from),
+        }
     }
 }
 
-impl FromRow<'_, SqliteRow> for ServerEntity {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        #[derive(FromRow)]
-        struct MaybeGuildEntity {
-            #[sqlx(default, rename = "guild_id")]
-            pub id: Option<i32>,
-            pub discord_guild_id: Option<i64>,
-            #[sqlx(default, rename = "guild_settings")]
-            pub settings: Option<String>,
-            #[sqlx(default, rename = "guild_inserted_at")]
-            pub inserted_at: Option<DateTime<Utc>>,
-            #[sqlx(default, rename = "guild_updated_at")]
-            pub updated_at: Option<DateTime<Utc>>,
-        }
-
-        let guild = MaybeGuildEntity::from_row(row)
-            .map(Some)?
-            .and_then(|maybe| {
-                Some(GuildEntity {
-                    id: maybe.id?,
-                    discord_guild_id: maybe.discord_guild_id?,
-                    settings: maybe.settings?,
-                    inserted_at: maybe.inserted_at?,
-                    updated_at: maybe.updated_at?,
-                    servers: None,
-                })
-            });
-
-        Ok(ServerEntity {
-            id: row.try_get("id")?,
-            guild_id: row.try_get("guild_id")?,
-            remote: row.try_get("remote")?,
-            label: row.try_get("label")?,
-            note: row.try_get("note")?,
-            inserted_at: row.try_get("inserted_at")?,
-            updated_at: row.try_get("updated_at")?,
-            guild,
-            remote_server: None,
-        })
-    }
+/// Gets a guild by its Discord guild ID.
+pub async fn get_guild(
+    discord_guild_id: i64,
+    conn: &mut SqliteConnection,
+) -> Result<Option<GuildEntity>, Error> {
+    sqlx::query_as::<_, GuildEntity>(
+        r#"
+        SELECT *
+        FROM guild g
+        WHERE discord_guild_id = $1
+        "#,
+    )
+    .bind(discord_guild_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(Error::new)
 }
 
 /// Gets a server by its id.
-pub async fn get_server_by_id(
+pub async fn get_server(
     server_id: i32,
     conn: &mut SqliteConnection,
 ) -> Result<Option<ServerEntity>, Error> {
-    // Fetch server
     sqlx::query_as::<_, ServerEntity>(
         r#"
-        SELECT
-            s.*,
-            g.settings AS guild_settings,
-            g.discord_guild_id,
-            g.inserted_at AS guild_inserted_at,
-            g.updated_at AS guild_inserted_at
-        FROM
-            server s, guild g
-        WHERE
-            s.guild_id = g.id
-            AND s.id = $1
+        SELECT *
+        FROM server s
+        WHERE id = $1
         "#,
     )
     .bind(server_id)
@@ -226,9 +183,9 @@ pub async fn check_servers(
 ) -> Result<(), Error> {
     let set = sqlx::query_as::<_, (i32,)>(
         r#"
-        SELECT s.id
-        FROM server s
-        WHERE s.guild_id = $1
+        SELECT id
+        FROM server
+        WHERE guild_id = $1
         "#,
     )
     .bind(guild_id)

@@ -145,7 +145,7 @@ impl Default for ServerTracker {
 }
 
 /// The result of a server knock.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct KnockResult {
     pub info: ServerInfo,
     pub players: Vec<PlayerInfo>,

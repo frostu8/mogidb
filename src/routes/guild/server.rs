@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 use crate::{
     AppState, deserialize_some,
     error::{Error, ErrorKind},
-    guild::{get_server_by_id, marshal_server_info},
+    guild::{get_server, marshal_server_info},
     json::Json,
     server::Error as ServerError,
     validate::Valid,
@@ -213,7 +213,7 @@ pub async fn show(
     };
 
     // Get server
-    let server = get_server_by_id(server_id, &mut *conn).await?;
+    let server = get_server(server_id, &mut *conn).await?;
     let Some(mut server) = server else {
         return Err(Error::not_found(format_args!(
             "server {} not found",
@@ -274,7 +274,7 @@ pub async fn update(
     };
 
     // Get server
-    let server = get_server_by_id(server_id, &mut *tx).await?;
+    let server = get_server(server_id, &mut *tx).await?;
     let Some(mut server) = server else {
         return Err(Error::not_found(format_args!(
             "server {} not found",

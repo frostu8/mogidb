@@ -44,6 +44,7 @@ pub struct UpsertUserRequest {
         (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
     )
 )]
+#[axum::debug_handler]
 pub async fn upsert(
     Path((discord_user_id,)): Path<(i64,)>,
     State(state): State<AppState>,

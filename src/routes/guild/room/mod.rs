@@ -1,5 +1,6 @@
 //! Room management.
 
+pub mod event;
 pub mod format;
 
 use axum::{
@@ -20,7 +21,12 @@ use sqlx::SqliteConnection;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState, error::Error, guild::GuildEntity, json::Json, room::get_room, validate::Valid,
+    AppState,
+    error::{Error, OptionExt as _},
+    guild::{GuildEntity, get_guild},
+    json::Json,
+    room::get_room,
+    validate::Valid,
 };
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -121,27 +127,10 @@ pub async fn create(
     Valid(Json(request)): Valid<Json<CreateRoomRequest>>,
 ) -> Result<Json<Room>, Error> {
     let mut tx = state.db.begin().await.map_err(Error::new)?;
-
     let now = Utc::now();
 
     // Get guild
-    let guild = sqlx::query_as::<_, GuildEntity>(
-        r#"
-        SELECT *
-        FROM guild
-        WHERE discord_guild_id = $1
-        "#,
-    )
-    .bind(guild_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-    let Some(mut guild) = guild else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    };
+    let mut guild = get_guild(guild_id, &mut *tx).await?.ok_or_not_found()?;
     guild
         .preload_servers(&state.server_tracker, &mut *tx)
         .await?;
@@ -179,7 +168,7 @@ pub async fn create(
         enabled: request.enabled,
         settings: overrides,
         guild,
-        formats: vec![],
+        formats: Some(vec![]),
         created_at: now,
         updated_at: now,
     };
@@ -210,24 +199,14 @@ pub async fn show(
 ) -> Result<Json<Room>, Error> {
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
-    // Check if guild exists
-    let (count,) =
-        sqlx::query_as::<_, (i32,)>("SELECT COUNT(*) FROM guild WHERE discord_guild_id = $1")
-            .bind(guild_id)
-            .fetch_one(&mut *conn)
-            .await
-            .map_err(Error::new)?;
-    if count <= 0 {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    }
-
-    let mut room = get_room(guild_id, channel_id, &mut conn).await?;
+    let mut room = get_room(guild_id, channel_id, &mut conn)
+        .await?
+        .ok_or_not_found()?;
     room.preload_formats_with_servers(&state.server_tracker, &mut conn)
         .await?;
     room.guild
+        .as_mut()
+        .expect("guild preloaded")
         .preload_servers(&state.server_tracker, &mut conn)
         .await?;
 
@@ -259,29 +238,18 @@ pub async fn update(
     Valid(Json(request)): Valid<Json<UpdateRoomRequest>>,
 ) -> Result<Json<Room>, Error> {
     let mut tx = state.db.begin().await.map_err(Error::new)?;
-
     let now = Utc::now();
 
-    // Check if guild exists
-    let (count,) =
-        sqlx::query_as::<_, (i32,)>("SELECT COUNT(*) FROM guild WHERE discord_guild_id = $1")
-            .bind(guild_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(Error::new)?;
-    if count <= 0 {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    }
-
     // Get room
-    let mut room = get_room(guild_id, channel_id, &mut tx).await?;
+    let mut room = get_room(guild_id, channel_id, &mut tx)
+        .await?
+        .ok_or_not_found()?;
     let room_id = room.id;
     room.preload_formats_with_servers(&state.server_tracker, &mut *tx)
         .await?;
     room.guild
+        .as_mut()
+        .expect("guild preloaded")
         .preload_servers(&state.server_tracker, &mut *tx)
         .await?;
 

@@ -1,6 +1,7 @@
 //! Error handling.
 
 use std::{
+    any::{Any, TypeId},
     error::Error as StdError,
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -15,7 +16,7 @@ use axum::{
 use derive_more::{Display, From};
 use mogidb_model::error::ApiError;
 
-use crate::server::packet;
+use crate::{room::RoomEntity, server::packet};
 
 /// An error.
 #[derive(Debug)]
@@ -181,8 +182,8 @@ pub enum ErrorKind {
     #[display("server(s) with ids {_0:?} do not exist")]
     InvalidServerIds(Vec<i32>),
     /// The server ran out of IDs while generating a new entity.
-    #[display("server out of ids")]
-    OutOfIds,
+    #[display("{_0}")]
+    IdsExhausted(crate::short_id::IdsExhausted),
     /// Some other internal error.
     #[from(ignore)]
     Other(eyre::Error),
@@ -212,5 +213,33 @@ impl IntoResponse for Error {
             response.extensions_mut().insert(Arc::new(error));
         }
         response
+    }
+}
+
+/// Option extension methods.
+pub trait OptionExt<T> {
+    /// Resolves an entity.
+    ///
+    /// If the option is `None`, this creates an associated not found error.
+    fn ok_or_not_found(self) -> Result<T, Error>
+    where
+        T: Any;
+}
+
+impl<T> OptionExt<T> for Option<T> {
+    fn ok_or_not_found(self) -> Result<T, Error>
+    where
+        T: Any,
+    {
+        self.ok_or_else(|| {
+            let type_id = TypeId::of::<T>();
+            let name = if type_id == TypeId::of::<RoomEntity>() {
+                "room"
+            } else {
+                "object"
+            };
+
+            Error::not_found(format_args!("{} not found", name))
+        })
     }
 }

@@ -3,13 +3,11 @@
 use chrono::{DateTime, Utc};
 use mogidb_model::user::{User, UserFlags};
 
-use rand::{Rng, RngExt as _, SeedableRng as _, distr::Alphanumeric};
+use rand::{Rng, SeedableRng as _};
 
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::error::{Error, ErrorKind};
-
-const MAX_INSERT_ATTEMPTS: i32 = 8;
+use crate::{error::Error, short_id};
 
 #[derive(Clone, Debug, FromRow)]
 pub struct UserEntity {
@@ -80,65 +78,49 @@ impl UserBuilder {
     where
         R: Rng,
     {
+        let Self {
+            display_name,
+            flags,
+            discord_user_id,
+            ..
+        } = self;
         let now = Utc::now();
 
-        // this is a new player
-        let mut inserted_user = None::<UserEntity>;
-
-        for _ in 0..MAX_INSERT_ATTEMPTS {
-            // generate a short id
-            let short_id = rng
-                .sample_iter(Alphanumeric)
-                .take(6)
-                .map(char::from)
-                .map(|c| char::to_ascii_uppercase(&c))
-                .collect::<String>();
-
+        short_id::allocate_with(rng)
+            .length(6)
             // try to insert with short_id
-            let result = sqlx::query_as::<_, UserEntity>(
-                r#"
-                INSERT INTO user
-                    (
-                        inserted_at,
-                        updated_at,
+            .insert(conn, async move |short_id, conn| {
+                sqlx::query_as::<_, UserEntity>(
+                    r#"
+                    INSERT INTO user
+                        (
+                            inserted_at,
+                            updated_at,
+                            short_id,
+                            display_name,
+                            flags,
+                            discord_user_id
+                        )
+                    VALUES ($1, $1, $2, $3, $4, $5)
+                    RETURNING
+                        id,
                         short_id,
                         display_name,
                         flags,
-                        discord_user_id
-                    )
-                VALUES ($1, $1, $2, $3, $4, $5)
-                RETURNING
-                    id,
-                    short_id,
-                    display_name,
-                    flags,
-                    discord_user_id,
-                    inserted_at,
-                    updated_at
-                "#,
-            )
-            .bind(now)
-            .bind(&short_id)
-            .bind(&self.display_name)
-            .bind(i32::from(self.flags))
-            .bind(self.discord_user_id)
-            .fetch_one(&mut *conn)
-            .await;
-
-            match result {
-                Ok(user) => {
-                    inserted_user = Some(user);
-                    break;
-                }
-                Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
-                    // if this is a unique violation, simply try again
-                    tracing::debug!("unique key {} failed, regenerating", short_id);
-                }
-                Err(err) => return Err(Error::new(err)),
-            }
-        }
-
-        inserted_user.ok_or_else(|| ErrorKind::OutOfIds.into())
+                        discord_user_id,
+                        inserted_at,
+                        updated_at
+                    "#,
+                )
+                .bind(now)
+                .bind(short_id)
+                .bind(&display_name)
+                .bind(i32::from(flags))
+                .bind(discord_user_id)
+                .fetch_one(conn)
+                .await
+            })
+            .await
     }
 }
 

@@ -22,7 +22,7 @@ use crate::{
     guild::check_servers,
     json::Json,
     room::{
-        format::{EventFormatEntity, get_format_by_id},
+        format::{EventFormatEntity, get_format},
         list_room_formats,
     },
     routes::guild::room::find_room,
@@ -205,7 +205,7 @@ pub async fn show(
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
     let room_id = find_room(guild_id, channel_id, &mut *conn).await?;
-    let format = get_format_by_id(format_id, &mut *conn).await?;
+    let format = get_format(format_id, &mut *conn).await?;
     let Some(mut format) = format else {
         return Err(Error::not_found(format_args!(
             "format {} not found",
@@ -265,7 +265,7 @@ pub async fn update(
     .await
     .map_err(Error::new)?;
 
-    let format = get_format_by_id(format_id, &mut *tx).await?;
+    let format = get_format(format_id, &mut *tx).await?;
     let Some(mut format) = format else {
         return Err(Error::not_found(format_args!(
             "format {} not found",

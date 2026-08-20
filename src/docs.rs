@@ -2,7 +2,7 @@
 
 use mogidb_model::{
     error::ApiError,
-    event::{EventFormat, FormatSelectionMode},
+    event::{Event, EventFormat, FormatSelectionMode},
     guild::Guild,
     room::{Room, RoomOptions, RoomOptionsOverrides},
     server::{GameServer, GameSpeed, PlayerInfo, ServerInfo},
@@ -15,6 +15,7 @@ use crate::routes::{
         self, CreateGuildRequest, UpdateGuildRequest, UpdateRoomSettings,
         room::{
             CreateRoomRequest, UpdateRoomRequest,
+            event::CreateEventRequest,
             format::{CreateEventFormatRequest, EventFormatsFilters, UpdateEventFormatRequest},
         },
         server::{CreateServerRequest, UpdateServerRequest},
@@ -39,6 +40,8 @@ use crate::routes::{
         guild::room::show,
         guild::room::update,
         guild::room::delete,
+        guild::room::event::create,
+        guild::room::event::show,
         guild::server::create,
         guild::server::show,
         guild::server::update,
@@ -56,6 +59,7 @@ use crate::routes::{
         Room,
         RoomOptions,
         RoomOptionsOverrides,
+        Event,
         EventFormat,
         GameServer,
         GameSpeed,
@@ -70,6 +74,7 @@ use crate::routes::{
         UpdateRoomRequest,
         CreateServerRequest,
         UpdateServerRequest,
+        CreateEventRequest,
         CreateEventFormatRequest,
         UpdateEventFormatRequest,
         UpsertUserRequest,
@@ -80,6 +85,7 @@ use crate::routes::{
         (name = "room", description = "Room management"),
         (name = "server", description = "Game server management"),
         (name = "user", description = "User management"),
+        (name = "event", description = "Events creation and management"),
     )
 )]
 pub struct ApiDoc;

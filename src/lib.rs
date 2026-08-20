@@ -3,12 +3,14 @@
 pub mod config;
 pub mod docs;
 pub mod error;
+pub mod event;
 pub mod form;
 pub mod guild;
 pub mod json;
 pub mod room;
 pub mod routes;
 pub mod server;
+pub mod short_id;
 pub mod user;
 pub mod validate;
 

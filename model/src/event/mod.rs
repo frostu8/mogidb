@@ -49,7 +49,8 @@ pub struct Event {
     /// The event status.
     pub status: EventStatus,
     /// The alternate title of the event.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ///
+    /// May be `null` if a title is absent.
     pub title: Option<String>,
     /// The list of players registered for the event.
     pub players: Vec<EventParticipant>,
@@ -58,7 +59,8 @@ pub struct Event {
     /// The server, if one was found.
     pub server: Option<GameServer>,
     /// The room the event is a part of.
-    pub room: Room,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room: Option<Room>,
     /// When the event was created.
     pub created_at: DateTime<Utc>,
 }
@@ -68,7 +70,7 @@ pub struct Event {
 pub struct EventParticipant {
     /// The team number assigned to the participant. Players with the same
     /// number are on the same team.
-    pub assigned_team: i32,
+    pub team_number: Option<i32>,
     /// The associated user of the event.
     pub user: User,
 }
