@@ -52,53 +52,59 @@ pub struct EventEntity {
 impl EventEntity {
     /// Preloads all the event's participants.
     pub async fn preload_participants(&mut self, conn: &mut SqliteConnection) -> Result<(), Error> {
-        // Fetch all players
-        let res = sqlx::query(
-            r#"
-            SELECT
-                p.*,
-                u.short_id AS user_short_id,
-                u.display_name AS user_display_name,
-                u.flags AS user_flags,
-                u.inserted_at AS user_inserted_at,
-                u.updated_at AS user_updated_at,
-                u.discord_user_id
-            FROM event_participant p, user u
-            WHERE
-                p.user_id = u.id
-                AND p.event_id = $1
-            "#,
-        )
-        .bind(self.id)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(Error::new)?
-        .into_iter()
-        .map(|row| {
-            Ok(EventParticipantEntity {
-                id: row.try_get("id")?,
-                user_id: row.try_get("user_id")?,
-                event_id: row.try_get("event_id")?,
-                team_number: row.try_get("team_number")?,
-                inserted_at: row.try_get("inserted_at")?,
-                updated_at: row.try_get("updated_at")?,
-                user: Some(UserEntity {
-                    id: row.try_get("user_id")?,
-                    short_id: row.try_get("user_short_id")?,
-                    display_name: row.try_get("user_display_name")?,
-                    flags: row.try_get::<i32, _>("user_flags")?.into(),
-                    discord_user_id: row.try_get("discord_user_id")?,
-                    inserted_at: row.try_get("user_inserted_at")?,
-                    updated_at: row.try_get("user_updated_at")?,
-                }),
-            })
-        })
-        .collect::<Result<Vec<_>, sqlx::Error>>()
-        .map_err(Error::new)?;
-
-        self.participants = Some(res);
+        self.participants = Some(get_participants(self.id, conn).await?);
         Ok(())
     }
+}
+
+/// Fetches all participants of an event, with their users embedded.
+pub async fn get_participants(
+    event_id: i32,
+    conn: &mut SqliteConnection,
+) -> Result<Vec<EventParticipantEntity>, Error> {
+    // Fetch all players
+    sqlx::query(
+        r#"
+        SELECT
+            p.*,
+            u.short_id AS user_short_id,
+            u.display_name AS user_display_name,
+            u.flags AS user_flags,
+            u.inserted_at AS user_inserted_at,
+            u.updated_at AS user_updated_at,
+            u.discord_user_id
+        FROM event_participant p, user u
+        WHERE
+            p.user_id = u.id
+            AND p.event_id = $1
+        "#,
+    )
+    .bind(event_id)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(Error::new)?
+    .into_iter()
+    .map(|row| {
+        Ok(EventParticipantEntity {
+            id: row.try_get("id")?,
+            user_id: row.try_get("user_id")?,
+            event_id: row.try_get("event_id")?,
+            team_number: row.try_get("team_number")?,
+            inserted_at: row.try_get("inserted_at")?,
+            updated_at: row.try_get("updated_at")?,
+            user: Some(UserEntity {
+                id: row.try_get("user_id")?,
+                short_id: row.try_get("user_short_id")?,
+                display_name: row.try_get("user_display_name")?,
+                flags: row.try_get::<i32, _>("user_flags")?.into(),
+                discord_user_id: row.try_get("discord_user_id")?,
+                inserted_at: row.try_get("user_inserted_at")?,
+                updated_at: row.try_get("user_updated_at")?,
+            }),
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()
+    .map_err(Error::new)
 }
 
 impl TryFrom<EventEntity> for Event {

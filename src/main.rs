@@ -77,6 +77,10 @@ async fn main() -> eyre::Result<()> {
                             patch(mogidb::routes::guild::room::event::update),
                         )
                         .route(
+                            "/{event_id}/participants",
+                            get(mogidb::routes::guild::room::event::participants::list),
+                        )
+                        .route(
                             "/{event_id}",
                             delete(mogidb::routes::guild::room::event::delete),
                         ),

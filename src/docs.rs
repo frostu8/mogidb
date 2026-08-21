@@ -2,7 +2,7 @@
 
 use mogidb_model::{
     error::ApiError,
-    event::{Event, EventFormat, FormatSelectionMode},
+    event::{Event, EventFormat, EventParticipant, FormatSelectionMode},
     guild::Guild,
     room::{Room, RoomOptions, RoomOptionsOverrides},
     server::{GameServer, GameSpeed, PlayerInfo, ServerInfo},
@@ -46,6 +46,7 @@ use crate::routes::{
         guild::room::event::show_current,
         guild::room::event::update,
         guild::room::event::delete,
+        guild::room::event::participants::list,
         guild::server::create,
         guild::server::show,
         guild::server::update,
@@ -65,6 +66,7 @@ use crate::routes::{
         RoomOptionsOverrides,
         Event,
         EventFormat,
+        EventParticipant,
         GameServer,
         GameSpeed,
         PlayerInfo,

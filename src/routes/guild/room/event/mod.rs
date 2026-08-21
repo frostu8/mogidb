@@ -1,5 +1,7 @@
 //! Event routes.
 
+pub mod participants;
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
