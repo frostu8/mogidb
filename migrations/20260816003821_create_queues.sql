@@ -15,7 +15,7 @@ CREATE TABLE user (
 CREATE TABLE profile (
     id INTEGER PRIMARY KEY,
     -- The parent user ID of the profile.
-    parent_id INTEGER REFERENCES user(id),
+    parent_id INTEGER REFERENCES user(id) ON DELETE SET NULL,
     -- The public key of their profile.
     public_key BINARY(32) NOT NULL UNIQUE,
     inserted_at TIMESTAMP NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE event (
     id INTEGER PRIMARY KEY,
     -- A short ID used to uniquely identify the event..
     short_id CHAR(9) UNIQUE NOT NULL,
-    room_id INTEGER NOT NULL REFERENCES room(id),
+    room_id INTEGER NOT NULL REFERENCES room(id) ON DELETE CASCADE,
     -- A user-defined title for the event.
     title VARCHAR(255),
     -- The stage of the event.
@@ -36,8 +36,8 @@ CREATE TABLE event (
     -- offbeat mess like I expected.
     -- Prevents scoring if an event is rejected.
     rejected BOOLEAN NOT NULL DEFAULT FALSE,
-    format_id INTEGER REFERENCES event_format(id),
-    server_id INTEGER REFERENCES server(id),
+    format_id INTEGER REFERENCES event_format(id) ON DELETE SET NULL,
+    server_id INTEGER REFERENCES server(id) ON DELETE SET NULL,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
@@ -45,8 +45,8 @@ CREATE TABLE event (
 -- A event can have many participants.
 CREATE TABLE event_participant (
     id INTEGER PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES user(id),
-    event_id INTEGER NOT NULL REFERENCES event(id),
+    user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    event_id INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,
     team_number INTEGER,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
@@ -57,7 +57,7 @@ CREATE TABLE event_participant (
 -- An event can have many rounds.
 CREATE TABLE round (
     id INTEGER PRIMARY KEY,
-    event_id INTEGER NOT NULL REFERENCES event(id),
+    event_id INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,
     -- The sequence number of the round. Used to force a certain sequence.
     sequence INTEGER NOT NULL DEFAULT 0,
     -- The level id played on the round
@@ -69,12 +69,12 @@ CREATE TABLE round (
 -- A round can have many participants
 CREATE TABLE round_participant (
     id INTEGER PRIMARY KEY,
-    round_id INTEGER NOT NULL REFERENCES round(id),
+    round_id INTEGER NOT NULL REFERENCES round(id) ON DELETE CASCADE,
     -- The user this record is for.
     -- May be null if the user hasn't been linked yet.
-    user_id INTEGER REFERENCES user(id),
+    user_id INTEGER REFERENCES user(id) ON DELETE SET NULL,
     -- The profile for this user.
-    profile_id INTEGER NOT NULL REFERENCES profile(id),
+    profile_id INTEGER NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
     -- Actual round data.
     -- For battle, this is the score of the player. For race, this is the
     -- player's EXP.

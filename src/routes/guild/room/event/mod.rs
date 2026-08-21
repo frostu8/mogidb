@@ -400,21 +400,6 @@ pub async fn delete(
     // Get guild
     let room = get_room(discord_guild_id, discord_channel_id, &mut *tx).await?;
 
-    // Cascade participants
-    sqlx::query(
-        r#"
-        DELETE FROM event_participant
-        WHERE event_id = (
-            SELECT id FROM event WHERE short_id = $1 AND room_id = $2
-        )
-        "#,
-    )
-    .bind(&event_id)
-    .bind(room.id)
-    .execute(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-
     // Delete event
     let res = sqlx::query(
         r#"

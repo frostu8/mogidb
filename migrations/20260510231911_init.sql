@@ -11,7 +11,7 @@ CREATE TABLE guild (
 -- Each guild has many channels called "rooms"
 CREATE TABLE room (
     id INTEGER PRIMARY KEY,
-    parent_id INTEGER NOT NULL REFERENCES guild(id),
+    parent_id INTEGER NOT NULL REFERENCES guild(id) ON DELETE CASCADE,
     discord_channel_id BIGINT NOT NULL UNIQUE,
     -- The name of the channel.
     name VARCHAR(255) NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE room (
 -- Each guild also has many servers
 CREATE TABLE server (
     id INTEGER PRIMARY KEY,
-    guild_id INTEGER NOT NULL REFERENCES guild(id),
+    guild_id INTEGER NOT NULL REFERENCES guild(id) ON DELETE CASCADE,
     -- The address of the server
     remote VARCHAR(255) NOT NULL,
     -- The label
@@ -44,7 +44,7 @@ CREATE TABLE server (
 CREATE TABLE event_format (
     id INTEGER PRIMARY KEY,
     -- The room this format is a part of.
-    room_id INTEGER NOT NULL REFERENCES room(id),
+    room_id INTEGER NOT NULL REFERENCES room(id) ON DELETE CASCADE,
     -- The name of the format.
     name VARCHAR(255) NOT NULL,
     -- Team balancing mode of the format
@@ -61,8 +61,8 @@ CREATE TABLE event_format (
 -- Each format "event_format" has >0 servers.
 CREATE TABLE format_server (
     id INTEGER PRIMARY KEY,
-    event_format_id INTEGER NOT NULL REFERENCES event_format(id),
-    server_id INTEGER NOT NULL REFERENCES server(id),
+    event_format_id INTEGER NOT NULL REFERENCES event_format(id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL REFERENCES server(id) ON DELETE CASCADE,
 
     UNIQUE (event_format_id, server_id)
 );
