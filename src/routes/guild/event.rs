@@ -1,5 +1,7 @@
 //! Events on a guild-wide basis.
 
+use std::collections::HashSet;
+
 use axum::extract::{Path, State};
 use garde::Validate;
 
@@ -12,12 +14,13 @@ use utoipa::IntoParams;
 
 use crate::{
     AppState,
-    error::Error,
+    error::{Error, ErrorKind, ResultExt},
     event::{EventEntity, ListEventsQuery},
     form::Form,
     guild::get_guild,
     json::Json,
     server::ServerTracker,
+    user::get_user,
     validate::Valid,
 };
 
@@ -30,11 +33,17 @@ pub struct GuildEventsFilters {
     /// Defaults to `false`.
     #[garde(skip)]
     pub active: bool,
+    /// Only show events that the user with the given id is in.
+    #[garde(skip)]
+    pub user: Option<String>,
 }
 
 impl Default for GuildEventsFilters {
     fn default() -> Self {
-        GuildEventsFilters { active: false }
+        GuildEventsFilters {
+            active: false,
+            user: None,
+        }
     }
 }
 
@@ -64,11 +73,39 @@ pub async fn list(
     let guild = get_guild(discord_guild_id, &mut conn).await?;
 
     // Search for active events
-    let events = ListEventsQuery::new()
+    let mut events = ListEventsQuery::new()
         .guild_id(guild.id)
         .active(filters.active)
         .fetch(&state.server_tracker, &mut *conn)
         .await?;
+
+    // Filter event based on user id, if applicable
+    if let Some(short_id) = filters.user.as_ref() {
+        // Fetch user
+        let user = get_user(&short_id, &mut conn).await.or_none()?;
+        let Some(user) = user else {
+            return Err(ErrorKind::NoSuchUser(short_id.clone()).into());
+        };
+
+        let event_ids = sqlx::query_as::<_, (i32,)>(
+            r#"
+            SELECT DISTINCT e.id
+            FROM event_participant p, event e
+            WHERE
+                p.event_id = e.id
+                AND p.user_id = $1
+            "#,
+        )
+        .bind(user.id)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(Error::new)?
+        .into_iter()
+        .map(|(id,)| id)
+        .collect::<HashSet<i32>>();
+
+        events.retain_mut(|event| event_ids.contains(&event.id));
+    }
 
     let mut results = Vec::with_capacity(events.len());
     for mut event in events {
