@@ -40,6 +40,10 @@ async fn main() -> eyre::Result<()> {
                 .route("/", post(mogidb::routes::guild::create))
                 .route("/{guild_id}", get(mogidb::routes::guild::show))
                 .route("/{guild_id}", patch(mogidb::routes::guild::update))
+                .route(
+                    "/{guild_id}/events",
+                    get(mogidb::routes::guild::event::list),
+                )
                 .nest(
                     "/{guild_id}/servers",
                     Router::new()
@@ -63,7 +67,19 @@ async fn main() -> eyre::Result<()> {
                     "/{guild_id}/rooms/{room_id}/events",
                     Router::new()
                         .route("/", post(mogidb::routes::guild::room::event::create))
-                        .route("/{event_id}", get(mogidb::routes::guild::room::event::show)),
+                        .route(
+                            "/~current",
+                            get(mogidb::routes::guild::room::event::show_current),
+                        )
+                        .route("/{event_id}", get(mogidb::routes::guild::room::event::show))
+                        .route(
+                            "/{event_id}",
+                            patch(mogidb::routes::guild::room::event::update),
+                        )
+                        .route(
+                            "/{event_id}",
+                            delete(mogidb::routes::guild::room::event::delete),
+                        ),
                 )
                 .nest(
                     "/{guild_id}/rooms/{room_id}/formats",

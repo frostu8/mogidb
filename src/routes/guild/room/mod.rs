@@ -167,7 +167,7 @@ pub async fn create(
         name: request.name,
         enabled: request.enabled,
         settings: overrides,
-        guild,
+        guild: Some(guild),
         formats: Some(vec![]),
         created_at: now,
         updated_at: now,

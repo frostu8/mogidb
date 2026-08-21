@@ -30,7 +30,12 @@ CREATE TABLE event (
     room_id INTEGER NOT NULL REFERENCES room(id),
     -- A user-defined title for the event.
     title VARCHAR(255),
+    -- The stage of the event.
     status INTEGER NOT NULL DEFAULT 0,
+    -- Sorry, your verse has been rejected, because it was an offkey and
+    -- offbeat mess like I expected.
+    -- Prevents scoring if an event is rejected.
+    rejected BOOLEAN NOT NULL DEFAULT FALSE,
     format_id INTEGER REFERENCES event_format(id),
     server_id INTEGER REFERENCES server(id),
     inserted_at TIMESTAMP NOT NULL,

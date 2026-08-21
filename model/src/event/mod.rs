@@ -16,6 +16,8 @@ use utoipa::ToSchema;
 use crate::{room::Room, server::GameServer, user::User};
 
 /// Event status.
+///
+/// An event will move through the four phases as players play on it.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -35,7 +37,7 @@ pub enum EventStatus {
     LFG = 0,
     /// The event queue is closed and the event is ongoing.
     Ongoing = 1,
-    /// The event is over.
+    /// The event has concluded normally.
     Concluded = 2,
     /// The event has been scored.
     Scored = 3,

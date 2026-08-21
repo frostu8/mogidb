@@ -32,7 +32,7 @@ impl Error {
         T: StdError + Send + Sync + 'static,
     {
         Error {
-            kind: ErrorKind::Other(eyre::Error::new(error)),
+            kind: ErrorKind::Other(eyre::Report::new(error)),
             message: None,
         }
     }
@@ -47,7 +47,7 @@ impl Error {
     where
         T: Display,
     {
-        Error::from(ErrorKind::NotFound).message(msg)
+        Error::from(ErrorKind::NotFound).with_message(msg)
     }
 
     /// Creates an exists error.
@@ -55,10 +55,17 @@ impl Error {
     where
         T: Display,
     {
-        Error::from(ErrorKind::Conflict).message(msg)
+        Error::from(ErrorKind::Conflict).with_message(msg)
     }
 
-    pub fn message<T>(self, msg: T) -> Error
+    pub fn message<T>(message: T) -> Error
+    where
+        T: Display,
+    {
+        Error::from(ErrorKind::Other(eyre::Error::msg(message.to_string())))
+    }
+
+    pub fn with_message<T>(self, msg: T) -> Error
     where
         T: Display,
     {
@@ -74,6 +81,12 @@ impl Error {
                 StatusCode::NOT_FOUND,
                 ApiError {
                     message: "resource does not exist".into(),
+                },
+            ),
+            ErrorKind::NoActiveEvent => (
+                StatusCode::NOT_FOUND,
+                ApiError {
+                    message: "no active event in the room".into(),
                 },
             ),
             ErrorKind::InvalidValue(err) => (
@@ -96,7 +109,10 @@ impl Error {
                     message: err.to_string(),
                 },
             ),
-            err @ ErrorKind::InvalidServerIds(_) | err @ ErrorKind::UndefinedLabel => (
+            err @ ErrorKind::InvalidServerIds(_)
+            | err @ ErrorKind::UndefinedLabel
+            | err @ ErrorKind::NoSuchFormat(_)
+            | err @ ErrorKind::NoSuchServer(_) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: err.to_string(),
@@ -167,6 +183,9 @@ pub enum ErrorKind {
     /// A resource was not found.
     #[display("entity not found")]
     NotFound,
+    /// The room has no active events.
+    #[display("no active event in the room")]
+    NoActiveEvent,
     /// A resource with that identifier already exists.
     #[display("entity already exists")]
     Conflict,
@@ -181,6 +200,14 @@ pub enum ErrorKind {
     /// Cannot assign a non-existant server (or list of servers) to a format.
     #[display("server(s) with ids {_0:?} do not exist")]
     InvalidServerIds(Vec<i32>),
+    /// Cannot assign a non-existant format to an event.
+    #[display("format {_0} does not exist in the event's room")]
+    #[from(ignore)]
+    NoSuchFormat(i32),
+    /// Cannot assign a non-existant server to an event.
+    #[display("server {_0} does not exist in the event's room")]
+    #[from(ignore)]
+    NoSuchServer(i32),
     /// The server ran out of IDs while generating a new entity.
     #[display("{_0}")]
     IdsExhausted(crate::short_id::IdsExhausted),

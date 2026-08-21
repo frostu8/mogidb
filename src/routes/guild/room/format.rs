@@ -13,7 +13,7 @@ use mogidb_model::{
 };
 use serde::Deserialize;
 
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
@@ -61,12 +61,13 @@ pub struct UpdateEventFormatRequest {
     pub servers: Option<Vec<i32>>,
 }
 
-#[derive(Default, Debug, Deserialize, Validate, ToSchema)]
+#[derive(Default, Debug, Deserialize, Validate, IntoParams)]
 #[serde(default)]
 #[garde(context(AppState as state))]
+#[into_params(parameter_in = Query)]
 pub struct EventFormatsFilters {
     #[garde(range(min = 1))]
-    #[schema(minimum = 1)]
+    #[into_params(minimum = 1)]
     pub player_count: Option<usize>,
 }
 
@@ -144,8 +145,8 @@ pub async fn create(
     params(
         ("guild_id" = i64, Path, description = "Discord guild id"),
         ("room_id" = i64, Path, description = "Discord channel id of the room"),
+        EventFormatsFilters,
     ),
-    request_body = EventFormatsFilters,
     responses(
         (status = OK, description = "The formats assigned to the room", body = Vec<EventFormat>),
         (status = NOT_FOUND, description = "Room not found", body = ApiError),

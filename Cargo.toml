@@ -17,7 +17,7 @@ tokio = { version = "1.52.3", features = ["macros", "rt", "rt-multi-thread", "ne
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 garde = { version = "0.22", features = ["derive"] }
-sqlx = { version = "0.8.6", features = ["chrono", "runtime-tokio-rustls", "sqlite"] }
+sqlx = { version = "0.9", features = ["chrono", "runtime-tokio", "sqlite"] }
 color-eyre = "0.6.5"
 chrono = { workspace = true, features = ["serde"] }
 num_enum = { workspace = true }
@@ -31,6 +31,13 @@ utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 clap = { version = "4", features = ["derive"] }
 serde_norway = "0.9.42"
 rand = "0.10.2"
+sea-query = { version = "1.0.2", features = ["sqlx-utils"] }
+sea-query-sqlx = { version = "0.9", features = [
+    "sqlx-sqlite",
+    "with-chrono",
+    "with-json",
+    "runtime-tokio",
+] }
 
 [workspace]
 resolver = "3"

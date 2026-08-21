@@ -11,6 +11,7 @@ use garde::Validate;
 use mogidb_model::{error::ApiError, server::GameServer};
 
 use serde::Deserialize;
+use sqlx::{Row as _, sqlite::SqliteRow};
 use utoipa::ToSchema;
 
 use crate::{
@@ -371,27 +372,28 @@ pub async fn update(
     )
 )]
 pub async fn delete(
-    Path((guild_id, server_id)): Path<(i64, i32)>,
+    Path((discord_guild_id, server_id)): Path<(i64, i32)>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, Error> {
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     // Get guild
-    let guild = sqlx::query_as::<_, super::GuildEntity>(
+    let guild_id = sqlx::query(
         r#"
-        SELECT *
+        SELECT id
         FROM guild
         WHERE discord_guild_id = $1
         "#,
     )
-    .bind(guild_id)
+    .bind(discord_guild_id)
+    .try_map(|row: SqliteRow| row.try_get::<i32, _>(0))
     .fetch_optional(&mut *tx)
     .await
     .map_err(Error::new)?;
-    let Some(guild) = guild else {
+    let Some(guild_id) = guild_id else {
         return Err(Error::not_found(format_args!(
             "guild {} not found",
-            guild_id
+            discord_guild_id
         )));
     };
 
@@ -405,7 +407,7 @@ pub async fn delete(
         "#,
     )
     .bind(server_id)
-    .bind(guild.id)
+    .bind(guild_id)
     .execute(&mut *tx)
     .await
     .map_err(Error::new)?;

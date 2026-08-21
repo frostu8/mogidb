@@ -51,10 +51,10 @@ impl AppState {
 }
 
 /// Deserialization helper for distinguishing between null and absent.
-fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     T: Deserialize<'de>,
     D: Deserializer<'de>,
 {
-    Option::deserialize(deserializer).map(Some)
+    T::deserialize(deserializer).map(Some)
 }

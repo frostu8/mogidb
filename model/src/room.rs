@@ -30,7 +30,8 @@ pub struct Room {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formats: Option<Vec<EventFormat>>,
     #[schema(no_recursion)]
-    pub guild: Guild,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild: Option<Guild>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

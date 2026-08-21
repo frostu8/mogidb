@@ -1,7 +1,6 @@
 pub mod format;
 
 use chrono::{DateTime, Utc};
-use derive_more::Display;
 use mogidb_model::{
     guild::Guild,
     room::{Room, RoomOptionsOverrides},
@@ -18,6 +17,7 @@ use crate::{
 #[derive(Clone, Debug, FromRow)]
 pub struct RoomEntity {
     pub id: i32,
+    pub parent_id: i32,
     pub discord_channel_id: i64,
     pub name: String,
     pub enabled: bool,
@@ -33,22 +33,20 @@ pub struct RoomEntity {
     pub formats: Option<Vec<EventFormatEntity>>,
 }
 
-impl TryFrom<RoomEntity> for Room {
-    type Error = MissingGuild;
-
-    fn try_from(value: RoomEntity) -> Result<Self, Self::Error> {
-        Ok(Room {
+impl From<RoomEntity> for Room {
+    fn from(value: RoomEntity) -> Self {
+        Room {
             id: value.discord_channel_id,
             name: value.name,
             enabled: value.enabled,
             settings: value.overrides,
             created_at: value.inserted_at,
             updated_at: value.updated_at,
-            guild: value.guild.map(Guild::from).ok_or(MissingGuild)?,
+            guild: value.guild.map(Guild::from),
             formats: value
                 .formats
                 .map(|v| v.into_iter().map(From::from).collect::<Vec<_>>()),
-        })
+        }
     }
 }
 
@@ -78,12 +76,6 @@ impl RoomEntity {
         Ok(())
     }
 }
-
-#[derive(Debug, Display)]
-#[display("missing embedded guild when converting to API model")]
-pub struct MissingGuild;
-
-impl std::error::Error for MissingGuild {}
 
 /// Gets a room by its `discord_channel_id` and parent guild `guild_id`.
 pub async fn get_room(

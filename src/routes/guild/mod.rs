@@ -1,5 +1,6 @@
 //! Application routes for the guild.
 
+pub mod event;
 pub mod room;
 pub mod server;
 
