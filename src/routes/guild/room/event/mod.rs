@@ -16,12 +16,12 @@ use mogidb_model::{
 };
 
 use serde::Deserialize;
-use sqlx::{Row as _, SqliteConnection, sqlite::SqliteRow};
+use sqlx::SqliteConnection;
 use utoipa::ToSchema;
 
 use crate::{
     AppState, deserialize_some,
-    error::{Error, ErrorKind, OptionExt as _},
+    error::{Error, ErrorKind, NotFound, ResultExt as _},
     event::{EventEntity, get_active_event, get_event},
     guild::get_server,
     json::Json,
@@ -90,9 +90,7 @@ pub async fn create(
 
     // Get guild and room
     // Cache room for later as we embed this
-    let mut room = get_room(guild_id, room_id, &mut *tx)
-        .await?
-        .ok_or_not_found()?;
+    let mut room = get_room(guild_id, room_id, &mut *tx).await?;
     let room_id = room.id;
 
     room.preload_formats_with_servers(&state.server_tracker, &mut *tx)
@@ -207,8 +205,7 @@ pub async fn show(
         &state.server_tracker,
         &mut conn,
     )
-    .await?
-    .ok_or_not_found()?;
+    .await?;
     aggregate_event(&mut event, &state.server_tracker, &mut conn).await?;
 
     Ok(Json(Event::try_from(event)?))
@@ -277,8 +274,7 @@ pub async fn update(
         &state.server_tracker,
         &mut *tx,
     )
-    .await?
-    .ok_or_not_found()?;
+    .await?;
     aggregate_event(&mut event, &state.server_tracker, &mut *tx).await?;
     let guild_id = event.room.as_ref().expect("preloaded room").parent_id;
 
@@ -295,7 +291,7 @@ pub async fn update(
     if let Some(format_id) = request.format_id {
         // Find the associated format before applying, to check if its in the
         // same room.
-        let format = get_format(format_id, &mut *tx).await?;
+        let format = get_format(format_id, &mut *tx).await.or_none()?;
         if let Some(mut format) = format {
             if format.room_id != event.room_id {
                 return Err(ErrorKind::NoSuchFormat(format_id).into());
@@ -314,7 +310,8 @@ pub async fn update(
     } else if let Some(format_id) = event.format_id {
         // Preload original format
         let mut format = get_format(format_id, &mut *tx)
-            .await?
+            .await
+            .or_none()?
             .ok_or_else(|| Error::message("nonexistant format for event"))?;
         format
             .preload_servers(&state.server_tracker, &mut *tx)
@@ -326,7 +323,7 @@ pub async fn update(
     if let Some(server_id) = request.server_id {
         // Find the associated server before applying, to check if its in the
         // same guild.
-        let server = get_server(server_id, &mut *tx).await?;
+        let server = get_server(server_id, &mut *tx).await.or_none()?;
         if let Some(mut server) = server {
             if server.guild_id != guild_id {
                 return Err(ErrorKind::NoSuchServer(server_id).into());
@@ -342,7 +339,8 @@ pub async fn update(
     } else if let Some(server_id) = event.server_id {
         // Preload original server
         let mut server = get_server(server_id, &mut *tx)
-            .await?
+            .await
+            .or_none()?
             .ok_or_else(|| Error::message("nonexistant server for event"))?;
         server.knock(&state.server_tracker).await?;
         event.server = Some(server);
@@ -400,45 +398,7 @@ pub async fn delete(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     // Get guild
-    let guild_id = sqlx::query(
-        r#"
-        SELECT id
-        FROM guild
-        WHERE discord_guild_id = $1
-        "#,
-    )
-    .bind(discord_guild_id)
-    .try_map(|row: SqliteRow| row.try_get::<i32, _>(0))
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-    let Some(guild_id) = guild_id else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            discord_guild_id
-        )));
-    };
-
-    // Get room
-    let room_id = sqlx::query(
-        r#"
-        SELECT id
-        FROM room
-        WHERE discord_channel_id = $1 AND parent_id = $2
-        "#,
-    )
-    .bind(discord_channel_id)
-    .bind(guild_id)
-    .try_map(|row: SqliteRow| row.try_get::<i32, _>(0))
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-    let Some(room_id) = room_id else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            discord_guild_id
-        )));
-    };
+    let room = get_room(discord_guild_id, discord_channel_id, &mut *tx).await?;
 
     // Cascade participants
     sqlx::query(
@@ -450,7 +410,7 @@ pub async fn delete(
         "#,
     )
     .bind(&event_id)
-    .bind(room_id)
+    .bind(room.id)
     .execute(&mut *tx)
     .await
     .map_err(Error::new)?;
@@ -463,7 +423,7 @@ pub async fn delete(
         "#,
     )
     .bind(&event_id)
-    .bind(room_id)
+    .bind(room.id)
     .execute(&mut *tx)
     .await
     .map_err(Error::new)?;
@@ -473,7 +433,7 @@ pub async fn delete(
     if res.rows_affected() > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(Error::not_found(format_args!("event {} not found", event_id)))
+        Err(NotFound::Event(event_id).into())
     }
 }
 

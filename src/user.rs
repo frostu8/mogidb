@@ -7,7 +7,10 @@ use rand::{Rng, SeedableRng as _};
 
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::{error::Error, short_id};
+use crate::{
+    error::{Error, NotFound},
+    short_id,
+};
 
 #[derive(Clone, Debug, FromRow)]
 pub struct UserEntity {
@@ -124,7 +127,7 @@ impl UserBuilder {
     }
 }
 
-/// Gets a user by their discord ID and guild ID.
+/// Gets a user by their discord ID.
 pub async fn get_user_by_discord_id(
     discord_user_id: i64,
     conn: &mut SqliteConnection,
@@ -143,10 +146,7 @@ pub async fn get_user_by_discord_id(
 }
 
 /// Gets a user by their short ID.
-pub async fn get_user(
-    short_id: &str,
-    conn: &mut SqliteConnection,
-) -> Result<Option<UserEntity>, Error> {
+pub async fn get_user(short_id: &str, conn: &mut SqliteConnection) -> Result<UserEntity, Error> {
     sqlx::query_as::<_, UserEntity>(
         r#"
         SELECT *
@@ -158,4 +158,5 @@ pub async fn get_user(
     .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)
+    .and_then(|user| user.ok_or_else(|| NotFound::User(short_id.to_owned()).into()))
 }

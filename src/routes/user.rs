@@ -117,9 +117,6 @@ pub async fn show(
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
     let user = get_user(&user_id, &mut *conn).await?;
-    let Some(user) = user else {
-        return Err(Error::not_found(format_args!("user {} not found", user_id)));
-    };
 
     Ok(Json(User::from(user)))
 }

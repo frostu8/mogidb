@@ -15,6 +15,7 @@ use crate::{
     error::Error,
     event::{EventEntity, ListEventsQuery},
     form::Form,
+    guild::get_guild,
     json::Json,
     server::ServerTracker,
     validate::Valid,
@@ -59,23 +60,12 @@ pub async fn list(
 ) -> Result<Json<Vec<Event>>, Error> {
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
-    // Get guild ID first
-    let guild_id = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
-        .bind(discord_guild_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map(|id| id.map(|(id,)| id))
-        .map_err(Error::new)?;
-    let Some(guild_id) = guild_id else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            discord_guild_id
-        )));
-    };
+    // Get guild
+    let guild = get_guild(discord_guild_id, &mut conn).await?;
 
     // Search for active events
     let events = ListEventsQuery::new()
-        .guild_id(guild_id)
+        .guild_id(guild.id)
         .active(filters.active)
         .fetch(&state.server_tracker, &mut *conn)
         .await?;

@@ -6,7 +6,7 @@ use mogidb_model::{
 use sqlx::{SqliteConnection, prelude::FromRow};
 
 use crate::{
-    error::{Error, ErrorKind},
+    error::{Error, ErrorKind, NotFound},
     guild::marshal_server_info,
     server::{Error as ServerError, ServerTracker},
 };
@@ -153,9 +153,9 @@ impl EventFormatEntity {
 
 /// Gets a format by its ID.
 pub async fn get_format(
-    id: i32,
+    format_id: i32,
     conn: &mut SqliteConnection,
-) -> Result<Option<EventFormatEntity>, Error> {
+) -> Result<EventFormatEntity, Error> {
     sqlx::query_as::<_, EventFormatEntity>(
         r#"
         SELECT f.*
@@ -163,8 +163,9 @@ pub async fn get_format(
         WHERE f.id = $1
         "#,
     )
-    .bind(id)
+    .bind(format_id)
     .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)
+    .and_then(|format| format.ok_or_else(|| NotFound::Format(format_id).into()))
 }

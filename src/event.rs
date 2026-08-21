@@ -18,7 +18,7 @@ use sea_query_sqlx::SqlxBinder as _;
 use sqlx::{FromRow, Row as _, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
-    error::{Error, OptionExt as _},
+    error::{Error, NotFound},
     guild::ServerEntity,
     room::{RoomEntity, format::EventFormatEntity, get_room},
     server::ServerTracker,
@@ -50,10 +50,20 @@ pub struct EventEntity {
 }
 
 impl EventEntity {
+    /// Checks if an event allows participant mutations.
+    pub fn is_roster_mutable(&self) -> bool {
+        !self.rejected && matches!(self.status, EventStatus::LFG | EventStatus::Ongoing)
+    }
+
     /// Preloads all the event's participants.
-    pub async fn preload_participants(&mut self, conn: &mut SqliteConnection) -> Result<(), Error> {
-        self.participants = Some(get_participants(self.id, conn).await?);
-        Ok(())
+    pub async fn preload_participants(
+        &mut self,
+        conn: &mut SqliteConnection,
+    ) -> Result<&mut Vec<EventParticipantEntity>, Error> {
+        let participants = get_participants(self.id, conn).await?;
+        self.participants = Some(participants);
+
+        Ok(self.participants.as_mut().unwrap())
     }
 }
 
@@ -183,11 +193,9 @@ pub async fn get_event(
     event_id: &str,
     tracker: &ServerTracker,
     conn: &mut SqliteConnection,
-) -> Result<Option<EventEntity>, Error> {
+) -> Result<EventEntity, Error> {
     // Get room w/ embedded guild
-    let room = get_room(discord_guild_id, discord_channel_id, &mut *conn)
-        .await?
-        .ok_or_not_found()?;
+    let room = get_room(discord_guild_id, discord_channel_id, &mut *conn).await?;
 
     // Get event, format and server
     let (query, values) = select_event_query()
@@ -206,9 +214,9 @@ pub async fn get_event(
             server.knock(tracker).await?;
         }
 
-        Ok(Some(event))
+        Ok(event)
     } else {
-        Ok(None)
+        Err(NotFound::Event(event_id.to_owned()).into())
     }
 }
 
@@ -220,9 +228,7 @@ pub async fn get_active_event(
     conn: &mut SqliteConnection,
 ) -> Result<Option<EventEntity>, Error> {
     // Get room w/ embedded guild
-    let room = get_room(discord_guild_id, discord_channel_id, &mut *conn)
-        .await?
-        .ok_or_not_found()?;
+    let room = get_room(discord_guild_id, discord_channel_id, &mut *conn).await?;
 
     // Find current active event
     let (query, values) = select_event_query()

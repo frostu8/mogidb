@@ -42,6 +42,8 @@ pub struct Room {
 pub struct RoomOptions {
     /// The amount of players needed to start an event.
     pub players_required: u32,
+    /// The amount of players allowed in an event.
+    pub max_players: u32,
     /// The mode for format selection.
     pub format_selection_mode: FormatSelectionMode,
     /// The amount of votes needed for a format to be selected before time is
@@ -64,6 +66,7 @@ impl RoomOptions {
     pub fn merge(self, other: RoomOptionsOverrides) -> RoomOptions {
         RoomOptions {
             players_required: other.players_required.unwrap_or(self.players_required),
+            max_players: other.max_players.unwrap_or(self.max_players),
             format_selection_mode: other
                 .format_selection_mode
                 .unwrap_or(self.format_selection_mode),
@@ -83,6 +86,7 @@ impl Default for RoomOptions {
     fn default() -> RoomOptions {
         RoomOptions {
             players_required: 8,
+            max_players: 12,
             format_selection_mode: FormatSelectionMode::Vote,
             votes_required: 4,
             decay_after: 3000,
@@ -99,6 +103,7 @@ impl Default for RoomOptions {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub struct RoomOptionsOverrides {
     pub players_required: Option<u32>,
+    pub max_players: Option<u32>,
     pub format_selection_mode: Option<FormatSelectionMode>,
     pub votes_required: Option<u32>,
     pub decay_after: Option<u32>,

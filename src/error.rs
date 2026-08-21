@@ -1,7 +1,6 @@
 //! Error handling.
 
 use std::{
-    any::{Any, TypeId},
     error::Error as StdError,
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -16,7 +15,7 @@ use axum::{
 use derive_more::{Display, From};
 use mogidb_model::error::ApiError;
 
-use crate::{room::RoomEntity, server::packet};
+use crate::server::packet;
 
 /// An error.
 #[derive(Debug)]
@@ -43,11 +42,11 @@ impl Error {
     }
 
     /// Creates a not found error.
-    pub fn not_found<T>(msg: T) -> Error
+    pub fn not_found<T>(err: T) -> Error
     where
-        T: Display,
+        T: Into<NotFound>,
     {
-        Error::from(ErrorKind::NotFound).with_message(msg)
+        Error::from(ErrorKind::NotFound(err.into()))
     }
 
     /// Creates an exists error.
@@ -65,6 +64,11 @@ impl Error {
         Error::from(ErrorKind::Other(eyre::Error::msg(message.to_string())))
     }
 
+    /// Checks if an error was the result of an entity that couldn't be found.
+    pub fn is_not_found(&self) -> bool {
+        matches!(self.kind, ErrorKind::NotFound(_))
+    }
+
     pub fn with_message<T>(self, msg: T) -> Error
     where
         T: Display,
@@ -77,10 +81,10 @@ impl Error {
 
     fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
         let (status, mut error) = match self.kind {
-            ErrorKind::NotFound => (
+            ErrorKind::NotFound(err) => (
                 StatusCode::NOT_FOUND,
                 ApiError {
-                    message: "resource does not exist".into(),
+                    message: err.to_string(),
                 },
             ),
             ErrorKind::NoActiveEvent => (
@@ -103,7 +107,12 @@ impl Error {
             ),
             err @ ErrorKind::LabelInUse(_)
             | err @ ErrorKind::Conflict
-            | err @ ErrorKind::RemoteExists(_) => (
+            | err @ ErrorKind::RemoteExists(_)
+            | err @ ErrorKind::UserInEvent(_)
+            | err @ ErrorKind::EventConcluded
+            | err @ ErrorKind::EventFull
+            | err @ ErrorKind::EventTeamsUnassignable
+            | err @ ErrorKind::EventRejected => (
                 StatusCode::CONFLICT,
                 ApiError {
                     message: err.to_string(),
@@ -111,8 +120,11 @@ impl Error {
             ),
             err @ ErrorKind::InvalidServerIds(_)
             | err @ ErrorKind::UndefinedLabel
+            | err @ ErrorKind::NotPlaying(_)
             | err @ ErrorKind::NoSuchFormat(_)
-            | err @ ErrorKind::NoSuchServer(_) => (
+            | err @ ErrorKind::NoSuchServer(_)
+            | err @ ErrorKind::NoFormatAssigned
+            | err @ ErrorKind::NoSuchUser(_) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: err.to_string(),
@@ -181,8 +193,8 @@ pub enum ErrorKind {
     #[display("server label not defined")]
     UndefinedLabel,
     /// A resource was not found.
-    #[display("entity not found")]
-    NotFound,
+    #[display("{_0}")]
+    NotFound(NotFound),
     /// The room has no active events.
     #[display("no active event in the room")]
     NoActiveEvent,
@@ -200,6 +212,10 @@ pub enum ErrorKind {
     /// Cannot assign a non-existant server (or list of servers) to a format.
     #[display("server(s) with ids {_0:?} do not exist")]
     InvalidServerIds(Vec<i32>),
+    /// Cannot join as a non-existant user.
+    #[display("user {_0} does not exist")]
+    #[from(ignore)]
+    NoSuchUser(String),
     /// Cannot assign a non-existant format to an event.
     #[display("format {_0} does not exist in the event's room")]
     #[from(ignore)]
@@ -208,6 +224,31 @@ pub enum ErrorKind {
     #[display("server {_0} does not exist in the event's room")]
     #[from(ignore)]
     NoSuchServer(i32),
+    /// The user is already in the event.
+    #[display("user with id {_0} already in event")]
+    #[from(ignore)]
+    UserInEvent(String),
+    /// The user is not playing.
+    #[display("user with id {_0} not playing")]
+    #[from(ignore)]
+    NotPlaying(String),
+    /// The event cannot accept more participants because it is rejected or too
+    /// far into its lifecycle.
+    #[display("event is no longer accepting participants")]
+    EventConcluded,
+    /// The event cannot accept more participants because it is full.
+    #[display("event is full")]
+    EventFull,
+    /// Teams cannot be assigned because the event has not format.
+    #[display("no format is assigned to the event")]
+    NoFormatAssigned,
+    /// An event's teams cannot be assigned because the event's status is not
+    /// [`EventStatus::Ongoing`].
+    #[display("cannot assign teams")]
+    EventTeamsUnassignable,
+    /// A mutable operation was blocked because the event is rejected.
+    #[display("event is rejected")]
+    EventRejected,
     /// The server ran out of IDs while generating a new entity.
     #[display("{_0}")]
     IdsExhausted(crate::short_id::IdsExhausted),
@@ -243,30 +284,38 @@ impl IntoResponse for Error {
     }
 }
 
-/// Option extension methods.
-pub trait OptionExt<T> {
-    /// Resolves an entity.
-    ///
-    /// If the option is `None`, this creates an associated not found error.
-    fn ok_or_not_found(self) -> Result<T, Error>
-    where
-        T: Any;
+/// A resource was not found.
+#[derive(Debug, Display)]
+pub enum NotFound {
+    #[display("event with id \"{_0}\" not found")]
+    Event(String),
+    #[display("server with id {_0} not found")]
+    Server(i32),
+    #[display("event format with id {_0} not found")]
+    Format(i32),
+    #[display("guild with discord id {_0} not found")]
+    Guild(i64),
+    #[display("room with discord id {_0} not found")]
+    Room(i64),
+    #[display("user with id \"{_0}\" not found")]
+    User(String),
+    #[display("object not found")]
+    Other,
 }
 
-impl<T> OptionExt<T> for Option<T> {
-    fn ok_or_not_found(self) -> Result<T, Error>
-    where
-        T: Any,
-    {
-        self.ok_or_else(|| {
-            let type_id = TypeId::of::<T>();
-            let name = if type_id == TypeId::of::<RoomEntity>() {
-                "room"
-            } else {
-                "object"
-            };
+/// Result extension methods.
+pub trait ResultExt<T> {
+    /// Transforms a `Result<T, Error>` into a `Result<Option<T>, Error>`,
+    /// producing a `None` when a [`NotFound`] error is found.
+    fn or_none(self) -> Result<Option<T>, Error>;
+}
 
-            Error::not_found(format_args!("{} not found", name))
-        })
+impl<T> ResultExt<T> for Result<T, Error> {
+    fn or_none(self) -> Result<Option<T>, Error> {
+        match self {
+            Ok(inner) => Ok(Some(inner)),
+            Err(err) if err.is_not_found() => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 }

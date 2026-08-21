@@ -11,13 +11,12 @@ use garde::Validate;
 use mogidb_model::{error::ApiError, server::GameServer};
 
 use serde::Deserialize;
-use sqlx::{Row as _, sqlite::SqliteRow};
 use utoipa::ToSchema;
 
 use crate::{
     AppState, deserialize_some,
-    error::{Error, ErrorKind},
-    guild::{get_server, marshal_server_info},
+    error::{Error, ErrorKind, NotFound},
+    guild::{get_guild, get_server, marshal_server_info},
     json::Json,
     server::Error as ServerError,
     validate::Valid,
@@ -79,7 +78,7 @@ pub struct UpdateServerRequest {
 )]
 #[axum::debug_handler]
 pub async fn create(
-    Path((guild_id,)): Path<(i64,)>,
+    Path((discord_guild_id,)): Path<(i64,)>,
     State(state): State<AppState>,
     Valid(Json(mut request)): Valid<Json<CreateServerRequest>>,
 ) -> Result<Json<GameServer>, Error> {
@@ -88,23 +87,7 @@ pub async fn create(
     let remote = request.remote.trim();
 
     // Get guild
-    let guild = sqlx::query_as::<_, super::GuildEntity>(
-        r#"
-        SELECT *
-        FROM guild
-        WHERE discord_guild_id = $1
-        "#,
-    )
-    .bind(guild_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-    let Some(guild) = guild else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    };
+    let guild = get_guild(discord_guild_id, &mut *tx).await?;
 
     // Try to ping server
     let server_state = match state.server_tracker.knock(remote).await {
@@ -195,39 +178,20 @@ pub async fn create(
     )
 )]
 pub async fn show(
-    Path((guild_id, server_id)): Path<(i64, i32)>,
+    Path((discord_guild_id, server_id)): Path<(i64, i32)>,
     State(state): State<AppState>,
 ) -> Result<Json<GameServer>, Error> {
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
-    // Check if guild exists
-    let res = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
-        .bind(guild_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(Error::new)?;
-    let Some((guild_id,)) = res else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    };
+    // Get guild
+    let guild = get_guild(discord_guild_id, &mut conn).await?;
 
     // Get server
-    let server = get_server(server_id, &mut *conn).await?;
-    let Some(mut server) = server else {
-        return Err(Error::not_found(format_args!(
-            "server {} not found",
-            server_id
-        )));
-    };
+    let mut server = get_server(server_id, &mut *conn).await?;
 
     // Check for guild id mismatch
-    if server.guild_id != guild_id {
-        return Err(Error::not_found(format_args!(
-            "server {} not found",
-            server_id
-        )));
+    if server.guild_id != guild.id {
+        return Err(NotFound::Server(server_id).into());
     }
 
     // Try to ping server
@@ -254,41 +218,22 @@ pub async fn show(
     )
 )]
 pub async fn update(
-    Path((guild_id, server_id)): Path<(i64, i32)>,
+    Path((discord_guild_id, server_id)): Path<(i64, i32)>,
     State(state): State<AppState>,
     Valid(Json(request)): Valid<Json<UpdateServerRequest>>,
 ) -> Result<Json<GameServer>, Error> {
     let mut tx = state.db.begin().await.map_err(Error::new)?;
     let now = Utc::now();
 
-    // Check if guild exists
-    let res = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
-        .bind(guild_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(Error::new)?;
-    let Some((guild_id,)) = res else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    };
+    // Get guild
+    let guild = get_guild(discord_guild_id, &mut *tx).await?;
 
     // Get server
-    let server = get_server(server_id, &mut *tx).await?;
-    let Some(mut server) = server else {
-        return Err(Error::not_found(format_args!(
-            "server {} not found",
-            server_id
-        )));
-    };
+    let mut server = get_server(server_id, &mut *tx).await?;
 
     // Check for guild id mismatch
-    if server.guild_id != guild_id {
-        return Err(Error::not_found(format_args!(
-            "server {} not found",
-            server_id
-        )));
+    if server.guild_id != guild.id {
+        return Err(NotFound::Server(server_id).into());
     }
 
     // Try to ping server
@@ -378,24 +323,7 @@ pub async fn delete(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     // Get guild
-    let guild_id = sqlx::query(
-        r#"
-        SELECT id
-        FROM guild
-        WHERE discord_guild_id = $1
-        "#,
-    )
-    .bind(discord_guild_id)
-    .try_map(|row: SqliteRow| row.try_get::<i32, _>(0))
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-    let Some(guild_id) = guild_id else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            discord_guild_id
-        )));
-    };
+    let guild = get_guild(discord_guild_id, &mut *tx).await?;
 
     // Delete server
     let res = sqlx::query(
@@ -407,7 +335,7 @@ pub async fn delete(
         "#,
     )
     .bind(server_id)
-    .bind(guild_id)
+    .bind(guild.id)
     .execute(&mut *tx)
     .await
     .map_err(Error::new)?;
@@ -417,10 +345,7 @@ pub async fn delete(
     if res.rows_affected() > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(Error::not_found(format_args!(
-            "server {} not found",
-            server_id
-        )))
+        Err(NotFound::Server(server_id).into())
     }
 }
 

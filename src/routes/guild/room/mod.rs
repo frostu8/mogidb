@@ -17,13 +17,12 @@ use mogidb_model::{
     room::{Room, RoomOptionsOverrides},
 };
 use serde::Deserialize;
-use sqlx::SqliteConnection;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState,
-    error::{Error, OptionExt as _},
-    guild::{GuildEntity, get_guild},
+    AppState, deserialize_some,
+    error::{Error, NotFound},
+    guild::get_guild,
     json::Json,
     room::get_room,
     validate::Valid,
@@ -67,22 +66,33 @@ pub struct UpdateRoomRequest {
     /// The amount of players needed to start an event.
     #[garde(range(min = 1))]
     #[schema(minimum = 1)]
+    #[serde(deserialize_with = "deserialize_some")]
     pub players_required: Option<Option<u32>>,
+    /// The maximum amount of players allowed in an event.
+    #[garde(range(min = 1))]
+    #[schema(minimum = 1)]
+    #[serde(deserialize_with = "deserialize_some")]
+    pub max_players: Option<Option<u32>>,
     /// The mode for format selection.
     #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_some")]
     pub format_selection_mode: Option<Option<FormatSelectionMode>>,
     /// The amount of votes needed for a format to be selected.
     #[garde(range(min = 1))]
     #[schema(minimum = 1)]
+    #[serde(deserialize_with = "deserialize_some")]
     pub votes_required: Option<Option<u32>>,
     /// The amount of time it takes for events to decay, in seconds.
     #[garde(range(min = 0))]
+    #[serde(deserialize_with = "deserialize_some")]
     pub decay_after: Option<Option<u32>>,
     /// The amount of time before the bot warns someone for inactivity, in seconds.
     #[garde(range(min = 0))]
+    #[serde(deserialize_with = "deserialize_some")]
     pub inactivity_warning_after: Option<Option<u32>>,
     /// The amount of time before the bot drops someone for inactivity, in seconds.
     #[garde(range(min = 0))]
+    #[serde(deserialize_with = "deserialize_some")]
     pub inactivity_drop_after: Option<Option<u32>>,
 }
 
@@ -90,6 +100,7 @@ impl UpdateRoomRequest {
     pub fn update(self, other: RoomOptionsOverrides) -> RoomOptionsOverrides {
         RoomOptionsOverrides {
             players_required: self.players_required.unwrap_or(other.players_required),
+            max_players: self.max_players.unwrap_or(other.max_players),
             format_selection_mode: self
                 .format_selection_mode
                 .unwrap_or(other.format_selection_mode),
@@ -130,7 +141,7 @@ pub async fn create(
     let now = Utc::now();
 
     // Get guild
-    let mut guild = get_guild(guild_id, &mut *tx).await?.ok_or_not_found()?;
+    let mut guild = get_guild(guild_id, &mut *tx).await?;
     guild
         .preload_servers(&state.server_tracker, &mut *tx)
         .await?;
@@ -199,9 +210,7 @@ pub async fn show(
 ) -> Result<Json<Room>, Error> {
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
-    let mut room = get_room(guild_id, channel_id, &mut conn)
-        .await?
-        .ok_or_not_found()?;
+    let mut room = get_room(guild_id, channel_id, &mut conn).await?;
     room.preload_formats_with_servers(&state.server_tracker, &mut conn)
         .await?;
     room.guild
@@ -241,9 +250,7 @@ pub async fn update(
     let now = Utc::now();
 
     // Get room
-    let mut room = get_room(guild_id, channel_id, &mut tx)
-        .await?
-        .ok_or_not_found()?;
+    let mut room = get_room(guild_id, channel_id, &mut tx).await?;
     let room_id = room.id;
     room.preload_formats_with_servers(&state.server_tracker, &mut *tx)
         .await?;
@@ -320,23 +327,7 @@ pub async fn delete(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     // Get guild
-    let guild = sqlx::query_as::<_, GuildEntity>(
-        r#"
-        SELECT *
-        FROM guild
-        WHERE discord_guild_id = $1
-        "#,
-    )
-    .bind(guild_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-    let Some(guild) = guild else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    };
+    let guild = get_guild(guild_id, &mut *tx).await?;
 
     // Delete room
     let res = sqlx::query(
@@ -356,56 +347,6 @@ pub async fn delete(
     if res.rows_affected() > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(Error::not_found(format_args!("room {} not found", room_id)))
+        Err(NotFound::Room(room_id).into())
     }
-}
-
-/// Fetches the room ID of a guild id and room id pair.
-///
-/// This returns an error if either guild or room cannot be found.
-async fn find_room(
-    guild_id: i64,
-    channel_id: i64,
-    conn: &mut SqliteConnection,
-) -> Result<i32, Error> {
-    // Check if guild exists
-    let res = sqlx::query_as::<_, (i32,)>(
-        r#"
-        SELECT g.id FROM guild g WHERE g.discord_guild_id = $1
-        "#,
-    )
-    .bind(guild_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(Error::new)?;
-    let Some((guild_id,)) = res else {
-        return Err(Error::not_found(format_args!(
-            "guild {} not found",
-            guild_id
-        )));
-    };
-
-    // Get room id
-    let res = sqlx::query_as::<_, (i32,)>(
-        r#"
-        SELECT r.id
-        FROM room r
-        WHERE
-            r.discord_channel_id = $1
-            AND r.parent_id = $2
-        "#,
-    )
-    .bind(channel_id)
-    .bind(guild_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(Error::new)?;
-    let Some((room_id,)) = res else {
-        return Err(Error::not_found(format_args!(
-            "room {} not found",
-            channel_id
-        )));
-    };
-
-    Ok(room_id)
 }

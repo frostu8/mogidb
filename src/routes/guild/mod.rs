@@ -19,7 +19,13 @@ use mogidb_model::{
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{AppState, error::Error, guild::GuildEntity, json::Json, validate::Valid};
+use crate::{
+    AppState,
+    error::{Error, NotFound},
+    guild::GuildEntity,
+    json::Json,
+    validate::Valid,
+};
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 #[garde(context(AppState as state))]
@@ -49,6 +55,10 @@ pub struct UpdateRoomSettings {
     #[garde(range(min = 1))]
     #[schema(minimum = 1)]
     pub players_required: Option<u32>,
+    /// The maximum amount of players allowed in an event.
+    #[garde(range(min = 1))]
+    #[schema(minimum = 1)]
+    pub max_players: Option<u32>,
     /// The mode for format selection.
     #[garde(skip)]
     pub format_selection_mode: Option<FormatSelectionMode>,
@@ -71,6 +81,7 @@ impl From<UpdateRoomSettings> for RoomOptionsOverrides {
     fn from(value: UpdateRoomSettings) -> Self {
         RoomOptionsOverrides {
             players_required: value.players_required,
+            max_players: value.max_players,
             format_selection_mode: value.format_selection_mode,
             votes_required: value.votes_required,
             decay_after: value.decay_after,
@@ -177,7 +188,7 @@ pub async fn show(
             let guild: Guild = row.try_into().map_err(Error::new)?;
             Ok(Json(guild))
         }
-        None => Err(not_found(guild_id)),
+        None => Err(NotFound::Guild(guild_id).into()),
     }
 }
 
@@ -220,7 +231,7 @@ pub async fn update(
     .map_err(Error::new)?;
 
     let Some(mut row) = res else {
-        return Err(not_found(guild_id));
+        return Err(NotFound::Guild(guild_id).into());
     };
     row.preload_servers(&state.server_tracker, &mut *tx).await?;
 
@@ -255,8 +266,4 @@ pub async fn update(
     tx.commit().await.map_err(Error::new)?;
 
     Ok(Json(guild))
-}
-
-fn not_found(guild_id: i64) -> Error {
-    Error::not_found(format_args!("guild {} not found", guild_id,))
 }

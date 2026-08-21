@@ -8,7 +8,7 @@ use mogidb_model::{
 use sqlx::{FromRow, SqliteConnection};
 
 use crate::{
-    error::{Error, OptionExt as _},
+    error::{Error, NotFound},
     guild::{GuildEntity, get_guild},
     room::format::EventFormatEntity,
     server::ServerTracker,
@@ -82,11 +82,9 @@ pub async fn get_room(
     discord_guild_id: i64,
     discord_channel_id: i64,
     conn: &mut SqliteConnection,
-) -> Result<Option<RoomEntity>, Error> {
+) -> Result<RoomEntity, Error> {
     // Get guild
-    let guild = get_guild(discord_guild_id, &mut *conn)
-        .await?
-        .ok_or_not_found()?;
+    let guild = get_guild(discord_guild_id, &mut *conn).await?;
 
     // Get room
     sqlx::query_as::<_, RoomEntity>(
@@ -101,11 +99,10 @@ pub async fn get_room(
     .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)
-    .map(|room| {
-        room.map(|room| RoomEntity {
-            guild: Some(guild),
-            ..room
-        })
+    .and_then(|room| room.ok_or_else(|| NotFound::Room(discord_channel_id).into()))
+    .map(|room| RoomEntity {
+        guild: Some(guild),
+        ..room
     })
 }
 

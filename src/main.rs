@@ -81,6 +81,18 @@ async fn main() -> eyre::Result<()> {
                             get(mogidb::routes::guild::room::event::participants::list),
                         )
                         .route(
+                            "/{event_id}/participants",
+                            post(mogidb::routes::guild::room::event::participants::join),
+                        )
+                        .route(
+                            "/{event_id}/participants/{user_id}",
+                            delete(mogidb::routes::guild::room::event::participants::leave),
+                        )
+                        .route(
+                            "/{event_id}/participants/teams:assign",
+                            post(mogidb::routes::guild::room::event::participants::assign_teams),
+                        )
+                        .route(
                             "/{event_id}",
                             delete(mogidb::routes::guild::room::event::delete),
                         ),

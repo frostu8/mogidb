@@ -13,7 +13,7 @@ use mogidb_model::{
 use sqlx::{FromRow, SqliteConnection};
 
 use crate::{
-    error::{Error, ErrorKind},
+    error::{Error, ErrorKind, NotFound},
     server::{Error as ServerError, KnockResult, ServerTracker},
 };
 
@@ -143,7 +143,7 @@ impl From<ServerEntity> for GameServer {
 pub async fn get_guild(
     discord_guild_id: i64,
     conn: &mut SqliteConnection,
-) -> Result<Option<GuildEntity>, Error> {
+) -> Result<GuildEntity, Error> {
     sqlx::query_as::<_, GuildEntity>(
         r#"
         SELECT *
@@ -155,13 +155,14 @@ pub async fn get_guild(
     .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)
+    .and_then(|guild| guild.ok_or_else(|| NotFound::Guild(discord_guild_id).into()))
 }
 
 /// Gets a server by its id.
 pub async fn get_server(
     server_id: i32,
     conn: &mut SqliteConnection,
-) -> Result<Option<ServerEntity>, Error> {
+) -> Result<ServerEntity, Error> {
     sqlx::query_as::<_, ServerEntity>(
         r#"
         SELECT *
@@ -173,6 +174,7 @@ pub async fn get_server(
     .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)
+    .and_then(|server| server.ok_or_else(|| NotFound::Server(server_id).into()))
 }
 
 /// Checks if a list of servers is associated with a guild.

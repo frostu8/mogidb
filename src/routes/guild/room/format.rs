@@ -17,15 +17,14 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
-    error::Error,
+    error::{Error, NotFound},
     form::Form,
     guild::check_servers,
     json::Json,
     room::{
         format::{EventFormatEntity, get_format},
-        list_room_formats,
+        get_room, list_room_formats,
     },
-    routes::guild::room::find_room,
     validate::Valid,
 };
 
@@ -98,7 +97,7 @@ pub async fn create(
     let now = Utc::now();
 
     // Get guild and room
-    let room_id = find_room(guild_id, channel_id, &mut *tx).await?;
+    let room = get_room(guild_id, channel_id, &mut *tx).await?;
     let (guild_id,) = sqlx::query_as::<_, (i32,)>(
         r#"
         SELECT id FROM guild WHERE discord_guild_id = $1
@@ -118,7 +117,7 @@ pub async fn create(
         "#,
     )
     .bind(now)
-    .bind(room_id)
+    .bind(room.id)
     .bind(&request.name)
     .bind(u8::from(request.team_mode))
     .fetch_one(&mut *tx)
@@ -160,10 +159,10 @@ pub async fn list(
 ) -> Result<Json<Vec<EventFormat>>, Error> {
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
-    let room_id = find_room(guild_id, channel_id, &mut conn).await?;
+    let room = get_room(guild_id, channel_id, &mut conn).await?;
 
     // List results
-    let res = list_room_formats(room_id, &mut conn).await?;
+    let res = list_room_formats(room.id, &mut conn).await?;
     let mut formats = Vec::with_capacity(res.len());
 
     for mut format in res {
@@ -205,21 +204,12 @@ pub async fn show(
 ) -> Result<Json<EventFormat>, Error> {
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
-    let room_id = find_room(guild_id, channel_id, &mut *conn).await?;
-    let format = get_format(format_id, &mut *conn).await?;
-    let Some(mut format) = format else {
-        return Err(Error::not_found(format_args!(
-            "format {} not found",
-            format_id,
-        )));
-    };
+    let room = get_room(guild_id, channel_id, &mut *conn).await?;
+    let mut format = get_format(format_id, &mut *conn).await?;
 
     // Check for room mismatch
-    if format.room_id != room_id {
-        return Err(Error::not_found(format_args!(
-            "format {} not found",
-            format_id,
-        )));
+    if format.room_id != room.id {
+        return Err(NotFound::Format(format_id).into());
     }
 
     format
@@ -255,31 +245,12 @@ pub async fn update(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
     let now = Utc::now();
 
-    let room_id = find_room(guild_id, channel_id, &mut *tx).await?;
-    let (guild_id,) = sqlx::query_as::<_, (i32,)>(
-        r#"
-        SELECT id FROM guild WHERE discord_guild_id = $1
-        "#,
-    )
-    .bind(guild_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-
-    let format = get_format(format_id, &mut *tx).await?;
-    let Some(mut format) = format else {
-        return Err(Error::not_found(format_args!(
-            "format {} not found",
-            format_id,
-        )));
-    };
+    let room = get_room(guild_id, channel_id, &mut *tx).await?;
+    let mut format = get_format(format_id, &mut *tx).await?;
 
     // Check for room mismatch
-    if format.room_id != room_id {
-        return Err(Error::not_found(format_args!(
-            "format {} not found",
-            format_id,
-        )));
+    if format.room_id != room.id {
+        return Err(NotFound::Format(format_id).into());
     }
 
     // Update settings
@@ -291,7 +262,7 @@ pub async fn update(
     }
     if let Some(servers) = request.servers {
         // Add servers
-        check_servers(guild_id, servers.iter().copied(), &mut *tx).await?;
+        check_servers(room.parent_id, servers.iter().copied(), &mut *tx).await?;
         format.patch_servers(&servers[..], &mut *tx).await?;
     }
 
@@ -346,7 +317,7 @@ pub async fn delete(
 ) -> Result<StatusCode, Error> {
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
-    let room_id = find_room(guild_id, channel_id, &mut *tx).await?;
+    let room = get_room(guild_id, channel_id, &mut *tx).await?;
 
     // Delete event format
     let res = sqlx::query(
@@ -356,7 +327,7 @@ pub async fn delete(
         "#,
     )
     .bind(format_id)
-    .bind(room_id)
+    .bind(room.id)
     .execute(&mut *tx)
     .await
     .map_err(Error::new)?;
@@ -366,9 +337,6 @@ pub async fn delete(
     if res.rows_affected() > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(Error::not_found(format_args!(
-            "format {} not found",
-            format_id
-        )))
+        Err(NotFound::Format(format_id).into())
     }
 }
