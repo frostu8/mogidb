@@ -38,6 +38,7 @@ sea-query-sqlx = { version = "0.9", features = [
     "with-json",
     "runtime-tokio",
 ] }
+subtle = "2.6.1"
 
 [workspace]
 resolver = "3"

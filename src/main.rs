@@ -3,11 +3,11 @@ use std::sync::Arc;
 use axum::{
     Router,
     extract::Request,
-    middleware::{Next, from_fn},
+    middleware::{Next, from_fn, from_fn_with_state},
     response::Response,
     routing::{delete, get, patch, post, put},
 };
-use mogidb::{AppState, config::read_config, docs::ApiDoc, error::Error};
+use mogidb::{AppState, auth::auth, config::read_config, docs::ApiDoc, error::Error};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use utoipa::OpenApi as _;
 use utoipa_swagger_ui::SwaggerUi;
@@ -25,8 +25,12 @@ async fn main() -> eyre::Result<()> {
         .init();
 
     let config = read_config("config.toml")?;
+    if config.server.access_token.is_none() {
+        tracing::warn!("No access token set; API will accept all requests!");
+        tracing::warn!("Set `ACCESS_TOKEN` to secure endpoints, see README.md for more info.");
+    }
 
-    let app_state = AppState::new(config).await?;
+    let app_state = AppState::new(config.clone()).await?;
     let app = Router::new()
         .nest(
             "/users",
@@ -89,7 +93,7 @@ async fn main() -> eyre::Result<()> {
                             delete(mogidb::routes::guild::room::event::participants::leave),
                         )
                         .route(
-                            "/{event_id}/participants/teams:assign",
+                            "/{event_id}/participants/teams~assign",
                             post(mogidb::routes::guild::room::event::participants::assign_teams),
                         )
                         .route(
@@ -116,11 +120,12 @@ async fn main() -> eyre::Result<()> {
                         ),
                 ),
         )
-        .with_state(app_state)
+        .with_state(app_state.clone())
+        .route_layer(from_fn_with_state(app_state.clone(), auth))
         .layer(from_fn(log_app_errors))
         .merge(SwaggerUi::new("/swagger").url("/openapi/openapi.json", ApiDoc::openapi()));
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8000")
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", config.http.port))
         .await
         .unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());

@@ -36,11 +36,16 @@ impl Default for HttpConfig {
 pub struct ServerConfig {
     /// The database url to connect to.
     pub database_url: Option<String>,
+    /// The API token used for the bot to authenticate.
+    pub access_token: Option<String>,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        ServerConfig { database_url: None }
+        ServerConfig {
+            database_url: None,
+            access_token: None,
+        }
     }
 }
 
@@ -50,6 +55,7 @@ pub fn read_config(config_path: impl AsRef<Path>) -> eyre::Result<Config> {
         .merge(Toml::file(config_path))
         .merge(Env::prefixed("MOGIDB_"))
         .merge(Env::raw().filter_map(|k| match k.as_str() {
+            "ACCESS_TOKEN" => Some(Uncased::from("server.access_token")),
             "DATABASE_URL" => Some(Uncased::from("server.database_url")),
             //"DISCORD_CLIENT_ID" => Some(Uncased::from("discord.client_id")),
             //"DISCORD_CLIENT_SECRET" => Some(Uncased::from("discord.client_secret")),

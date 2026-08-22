@@ -81,6 +81,12 @@ impl Error {
 
     fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
         let (status, mut error) = match self.kind {
+            ErrorKind::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                ApiError {
+                    message: "request was unauthorized".into(),
+                },
+            ),
             ErrorKind::NotFound(err) => (
                 StatusCode::NOT_FOUND,
                 ApiError {
@@ -177,6 +183,8 @@ where
 /// An error kind.
 #[derive(Debug, Display, From)]
 pub enum ErrorKind {
+    /// Request was unauthorized.
+    Unauthorized,
     /// An invalid value was given.
     #[display("{_0}")]
     InvalidValue(garde::Report),

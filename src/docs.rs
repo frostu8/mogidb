@@ -11,6 +11,7 @@ use mogidb_model::{
     user::{User, UserFlags},
 };
 use utoipa::OpenApi;
+use utoipa::{Modify, openapi::security::{ApiKey, ApiKeyValue, SecurityScheme}};
 
 use crate::routes::{
     guild::{
@@ -32,6 +33,7 @@ use crate::routes::{
         title = "MogiDB",
         description = "Gutbuster backend database and API."
     ),
+    modifiers(&SecurityAddon),
     paths(
         user::upsert,
         user::show,
@@ -103,6 +105,26 @@ use crate::routes::{
     )
 )]
 pub struct ApiDoc;
+
+/// Adds the API key security scheme to the documentation.
+///
+/// All routes are guarded by the auth middleware (`X-API-KEY` header), so the
+/// requirement is applied globally here rather than per-operation.
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.get_or_insert_default();
+        components.add_security_scheme(
+            "api_key",
+            SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("X-API-KEY"))),
+        );
+        openapi.security = Some(vec![utoipa::openapi::SecurityRequirement::new(
+            "api_key",
+            Vec::<String>::new(),
+        )]);
+    }
+}
 
 #[cfg(test)]
 mod tests {

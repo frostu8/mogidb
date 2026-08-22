@@ -324,7 +324,7 @@ pub async fn leave(
 /// assigned a `null` `team_number`.
 #[utoipa::path(
     post,
-    path = "/guilds/{guild_id}/rooms/{room_id}/events/{event_id}/participants/teams:assign",
+    path = "/guilds/{guild_id}/rooms/{room_id}/events/{event_id}/participants/teams~assign",
     tag = "event",
     params(
         ("guild_id" = i64, Path, description = "Discord guild id"),

@@ -27,6 +27,7 @@ use crate::{
 #[derive(Debug, Deserialize, Validate, IntoParams)]
 #[serde(default)]
 #[garde(context(AppState as state))]
+#[into_params(parameter_in = Query)]
 pub struct GuildEventsFilters {
     /// Whether or not to show only active events.
     ///
