@@ -36,38 +36,10 @@ impl GuildEntity {
         &mut self,
         tracker: &ServerTracker,
         conn: &mut SqliteConnection,
-    ) -> Result<(), Error> {
-        // List all servers in a guild
-        let mut servers = sqlx::query_as::<_, ServerEntity>(
-            r#"
-            SELECT s.*
-            FROM server s, guild g
-            WHERE
-                s.guild_id = g.id
-                AND g.discord_guild_id = $1
-            "#,
-        )
-        .bind(self.discord_guild_id)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(Error::new)?;
-
-        for server in servers.iter_mut() {
-            // Ping server
-            let remote_server = match tracker.knock(&server.remote).await {
-                Ok(res) => Some(res),
-                // Request timed out, maybe the server is down?
-                // Fetch cached result
-                Err(ServerError::Timeout(_)) => tracker.get(&server.remote),
-                Err(ServerError::Packet(err)) => return Err(ErrorKind::Srb2Packet(err).into()),
-                Err(err) => return Err(Error::new(err)),
-            };
-            server.remote_server = remote_server;
-        }
-
+    ) -> Result<&mut Vec<ServerEntity>, Error> {
+        let servers = get_all_servers(self.id, tracker, conn).await?;
         self.servers = Some(servers);
-
-        Ok(())
+        Ok(self.servers.as_mut().unwrap())
     }
 }
 
@@ -156,6 +128,41 @@ pub async fn get_guild(
     .await
     .map_err(Error::new)
     .and_then(|guild| guild.ok_or_else(|| NotFound::Guild(discord_guild_id).into()))
+}
+
+/// Fetches all servers in a guild.
+pub async fn get_all_servers(
+    guild_id: i32,
+    tracker: &ServerTracker,
+    conn: &mut SqliteConnection,
+) -> Result<Vec<ServerEntity>, Error> {
+    // List all servers in a guild
+    let mut servers = sqlx::query_as::<_, ServerEntity>(
+        r#"
+        SELECT *
+        FROM server
+        WHERE guild_id = $1
+        "#,
+    )
+    .bind(guild_id)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(Error::new)?;
+
+    for server in servers.iter_mut() {
+        // Ping server
+        let remote_server = match tracker.knock(&server.remote).await {
+            Ok(res) => Some(res),
+            // Request timed out, maybe the server is down?
+            // Fetch cached result
+            Err(ServerError::Timeout(_)) => tracker.get(&server.remote),
+            Err(ServerError::Packet(err)) => return Err(ErrorKind::Srb2Packet(err).into()),
+            Err(err) => return Err(Error::new(err)),
+        };
+        server.remote_server = remote_server;
+    }
+
+    Ok(servers)
 }
 
 /// Gets a server by its id.

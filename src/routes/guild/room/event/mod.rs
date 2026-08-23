@@ -56,11 +56,11 @@ pub struct UpdateEventRequest {
     /// The format of the event.
     #[serde(deserialize_with = "deserialize_some")]
     #[garde(skip)]
-    pub format_id: Option<i32>,
+    pub format: Option<i32>,
     /// The server the event will be played on.
     #[serde(deserialize_with = "deserialize_some")]
     #[garde(skip)]
-    pub server_id: Option<i32>,
+    pub server: Option<i32>,
 }
 
 /// Creates a new event in a given room.
@@ -251,6 +251,7 @@ pub async fn show_current(
         ("room_id" = i64, Path, description = "Discord channel id of the room"),
         ("event_id" = String, Path, description = "Id of the event"),
     ),
+    request_body = UpdateEventRequest,
     responses(
         (status = OK, description = "The event", body = Event),
         (status = BAD_REQUEST, description = "Failed to update the event", body = ApiError),
@@ -288,7 +289,7 @@ pub async fn update(
         event.status = status;
     }
 
-    if let Some(format_id) = request.format_id {
+    if let Some(format_id) = request.format {
         // Find the associated format before applying, to check if its in the
         // same room.
         let format = get_format(format_id, &mut *tx).await.or_none()?;
@@ -320,7 +321,7 @@ pub async fn update(
         event.format = Some(format);
     }
 
-    if let Some(server_id) = request.server_id {
+    if let Some(server_id) = request.server {
         // Find the associated server before applying, to check if its in the
         // same guild.
         let server = get_server(server_id, &mut *tx).await.or_none()?;

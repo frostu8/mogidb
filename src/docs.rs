@@ -55,6 +55,7 @@ use crate::routes::{
         guild::room::event::participants::leave,
         guild::room::event::participants::assign_teams,
         guild::server::create,
+        guild::server::list,
         guild::server::show,
         guild::server::update,
         guild::server::delete,

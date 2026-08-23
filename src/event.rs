@@ -232,6 +232,7 @@ pub async fn get_active_event(
 
     // Find current active event
     let (query, values) = select_event_query()
+        .and_where(Expr::col((Table::Event, "room_id")).eq(room.id))
         .and_where(
             Expr::col((Table::Event, "status"))
                 .eq(u8::from(EventStatus::LFG))

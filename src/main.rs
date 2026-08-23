@@ -51,6 +51,7 @@ async fn main() -> eyre::Result<()> {
                 .nest(
                     "/{guild_id}/servers",
                     Router::new()
+                        .route("/", get(mogidb::routes::guild::server::list))
                         .route("/", post(mogidb::routes::guild::server::create))
                         .route("/{server_id}", get(mogidb::routes::guild::server::show))
                         .route("/{server_id}", patch(mogidb::routes::guild::server::update))

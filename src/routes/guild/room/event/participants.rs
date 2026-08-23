@@ -19,7 +19,7 @@ use utoipa::ToSchema;
 use crate::{
     AppState, deserialize_some,
     error::{Error, ErrorKind, ResultExt as _},
-    event::{EventParticipantEntity, get_event, get_participants},
+    event::{get_event, get_participants},
     json::Json,
     routes::guild::room::event::aggregate_event,
     user::get_user,
@@ -181,8 +181,8 @@ pub async fn join(
     .await;
 
     // Check if the user already is in the queue
-    let participant_id = match res {
-        Ok(info) if info.rows_affected() > 0 => info.last_insert_rowid() as i32,
+    match res {
+        Ok(info) if info.rows_affected() > 0 => {}
         // Do not allow joins if the event is full
         Ok(_info) => return Err(ErrorKind::EventFull.into()),
         Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
@@ -199,6 +199,7 @@ pub async fn join(
         SET updated_at = $1, status = $2
         WHERE
             id = $3
+            AND status = 0
             AND (SELECT COUNT(*) FROM event_participant WHERE event_id = event.id)
                 >= $4
         "#,
@@ -211,23 +212,10 @@ pub async fn join(
     .await
     .map_err(Error::new)?;
 
-    // Preload participant list
+    // Preload participant list (includes the just-inserted row)
     event.preload_participants(&mut *tx).await?;
 
     tx.commit().await.map_err(Error::new)?;
-
-    // Update stale data
-    if let Some(participants) = event.participants.as_mut() {
-        participants.push(EventParticipantEntity {
-            id: participant_id,
-            user_id: user.id,
-            event_id: event.id,
-            team_number: None,
-            inserted_at: now,
-            updated_at: now,
-            user: Some(user),
-        });
-    }
 
     let started = if res.rows_affected() > 0 {
         // The event was started, so update stale data

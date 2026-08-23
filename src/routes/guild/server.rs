@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 use crate::{
     AppState, deserialize_some,
     error::{Error, ErrorKind, NotFound},
-    guild::{get_guild, get_server, marshal_server_info},
+    guild::{get_all_servers, get_guild, get_server, marshal_server_info},
     json::Json,
     server::Error as ServerError,
     validate::Valid,
@@ -160,6 +160,45 @@ pub async fn create(
         info: server_state.map(marshal_server_info),
         guild: Some(guild.try_into().map_err(Error::new)?),
     }))
+}
+
+/// Lists all servers in a guild.
+///
+/// Live tracker information (server name, map, players) is included for each
+/// server, refreshed on the server's tracking cadence.
+#[utoipa::path(
+    get,
+    path = "/guilds/{guild_id}/servers",
+    tag = "server",
+    params(
+        ("guild_id" = i64, Path, description = "Discord guild id"),
+    ),
+    responses(
+        (status = OK, description = "The servers registered to the guild", body = [GameServer]),
+        (status = NOT_FOUND, description = "Guild not found", body = ApiError),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
+    )
+)]
+#[axum::debug_handler]
+pub async fn list(
+    Path((discord_guild_id,)): Path<(i64,)>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<GameServer>>, Error> {
+    let mut conn = state.db.acquire().await.map_err(Error::new)?;
+
+    // Get guild by ID
+    let guild_id = sqlx::query_as::<_, (i32,)>("SELECT id FROM guild WHERE discord_guild_id = $1")
+        .bind(discord_guild_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(Error::new)?;
+    let Some((guild_id,)) = guild_id else {
+        return Err(NotFound::Guild(discord_guild_id).into());
+    };
+
+    // List all servers
+    let servers = get_all_servers(guild_id, &state.server_tracker, &mut conn).await?;
+    Ok(Json(servers.into_iter().map(GameServer::from).collect()))
 }
 
 /// Shows a server.
