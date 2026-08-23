@@ -47,6 +47,8 @@ CREATE TABLE event_participant (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
     event_id INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+    -- If the player is a substitute
+    substitute BOOLEAN NOT NULL DEFAULT FALSE,
     team_number INTEGER,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,

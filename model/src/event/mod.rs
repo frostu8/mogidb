@@ -70,6 +70,10 @@ pub struct Event {
 /// An event participant.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ToSchema)]
 pub struct EventParticipant {
+    /// Whether the player is a sub or a main participant.
+    ///
+    /// `true` if the player is a sub.
+    pub substitute: bool,
     /// The team number assigned to the participant. Players with the same
     /// number are on the same team.
     pub team_number: Option<i32>,

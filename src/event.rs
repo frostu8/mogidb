@@ -99,6 +99,7 @@ pub async fn get_participants(
             id: row.try_get("id")?,
             user_id: row.try_get("user_id")?,
             event_id: row.try_get("event_id")?,
+            substitute: row.try_get("substitute")?,
             team_number: row.try_get("team_number")?,
             inserted_at: row.try_get("inserted_at")?,
             updated_at: row.try_get("updated_at")?,
@@ -157,6 +158,7 @@ pub struct EventParticipantEntity {
     pub id: i32,
     pub user_id: i32,
     pub event_id: i32,
+    pub substitute: bool,
     pub team_number: Option<i32>,
     pub inserted_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -171,6 +173,7 @@ impl TryFrom<EventParticipantEntity> for EventParticipant {
 
     fn try_from(value: EventParticipantEntity) -> Result<Self, Self::Error> {
         Ok(EventParticipant {
+            substitute: value.substitute,
             team_number: value.team_number,
             user: value
                 .user

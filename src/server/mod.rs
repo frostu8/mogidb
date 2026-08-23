@@ -7,13 +7,18 @@ use std::{
     fmt::{self, Display, Formatter},
     io,
     net::{SocketAddr, ToSocketAddrs},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use chrono::{DateTime, Utc};
 use derive_more::From;
 
-use tokio::{net::UdpSocket, time::timeout};
+use tokio::{
+    net::UdpSocket,
+    sync::{Semaphore, TryAcquireError},
+    time::timeout,
+};
 
 use packet::{Packet, Payload, PlayerInfo, ServerInfo};
 
@@ -26,6 +31,8 @@ pub struct ServerTracker {
 #[derive(Debug)]
 struct ServerTrackerState {
     servers: papaya::HashMap<SocketAddr, Entry>,
+    locks: papaya::HashMap<SocketAddr, Arc<Semaphore>>,
+
     max_ping_count: usize,
     ratelimit_duration: Duration,
     timeout: Duration,
@@ -60,6 +67,8 @@ impl ServerTracker {
     }
 
     /// Knocks a server.
+    ///
+    /// This will first try to pull from the cache.
     pub async fn knock(&self, ip: impl ToSocketAddrs) -> Result<KnockResult, Error> {
         // Get address
         let address = ip.to_socket_addrs()?.next().expect("at least one address");
@@ -68,7 +77,7 @@ impl ServerTracker {
         let now_utc = Utc::now();
 
         // Resolve entry
-        {
+        let mut pings = {
             let servers = self.state.servers.pin();
             if let Some(server) = servers.get(&address) {
                 // Check if we should try to ping or if we've pelted the server enough
@@ -80,9 +89,41 @@ impl ServerTracker {
                         players: server.players.clone(),
                         last_ping_time: server.last_ping_time,
                     });
+                } else {
+                    server.pings.clone()
                 }
+            } else {
+                Vec::new()
             }
-        }
+        };
+
+        // We need to fetch fresh data, try locking first
+        let lock = {
+            let locks_pin = self.state.locks.pin();
+            Arc::clone(locks_pin.get_or_insert_with(address, || Arc::new(Semaphore::new(1))))
+        };
+
+        let _permit = match lock.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(TryAcquireError::NoPermits) => {
+                // Another taskis already knocking for us, wait for them to be done.
+                let permit = lock.acquire().await;
+                drop(permit);
+
+                // Get data
+                let servers_pin = self.state.servers.pin();
+                let server = servers_pin
+                    .get(&address)
+                    .expect("fresh or stale server info");
+
+                return Ok(KnockResult {
+                    info: server.info.clone(),
+                    players: server.players.clone(),
+                    last_ping_time: server.last_ping_time,
+                });
+            }
+            Err(_) => panic!("semaphore poisoned"),
+        };
 
         let port = address.port();
 
@@ -94,17 +135,11 @@ impl ServerTracker {
                 // Set entry
                 let servers = self.state.servers.pin();
 
-                let mut pings = if let Some(entry) = servers.get(&address) {
-                    if entry.pings.len() >= self.state.max_ping_count {
-                        // Truncate
-                        entry.pings.iter().copied().skip(1).collect::<Vec<_>>()
-                    } else {
-                        entry.pings.clone()
-                    }
-                } else {
-                    // Start new pings list
-                    Vec::new()
-                };
+                if pings.len() >= self.state.max_ping_count {
+                    // Truncate
+                    pings.rotate_left(1);
+                    pings.pop();
+                }
                 pings.push(result.ping);
 
                 servers.insert(
@@ -136,6 +171,7 @@ impl Default for ServerTracker {
         ServerTracker {
             state: ServerTrackerState {
                 servers: papaya::HashMap::new(),
+                locks: papaya::HashMap::new(),
                 max_ping_count: 8,
                 ratelimit_duration: Duration::from_secs(30),
                 timeout: Duration::from_secs(2),
@@ -268,6 +304,7 @@ impl StdError for Error {
 
 #[derive(Debug)]
 struct Entry {
+    #[allow(dead_code)]
     socket_addr: SocketAddr,
     last_ping: Instant,
     last_ping_time: DateTime<Utc>,

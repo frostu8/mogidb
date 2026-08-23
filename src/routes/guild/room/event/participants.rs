@@ -166,11 +166,15 @@ pub async fn join(
     }
 
     // First, we insert the new user with a conditional insert
+    // Derive the
     let res = sqlx::query(
         r#"
-        INSERT INTO event_participant (inserted_at, updated_at, user_id, event_id)
-        SELECT $1, $1, $2, $3
-        WHERE (SELECT COUNT(*) FROM event_participant WHERE event_id = $3) < $4
+        INSERT INTO event_participant (inserted_at, updated_at, user_id, event_id, substitute)
+        SELECT $1, $1, $2, $3, NOT event.status = 0
+        FROM event
+        WHERE
+            event.id = $3
+            AND (SELECT COUNT(*) FROM event_participant WHERE event_id = $3) < $4
         "#,
     )
     .bind(now)
