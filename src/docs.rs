@@ -19,7 +19,7 @@ use crate::routes::{
         room::{
             CreateRoomRequest, UpdateRoomRequest,
             event::{CreateEventRequest, participants::{AssignTeamsRequest, JoinEventRequest}},
-            format::{CreateEventFormatRequest, UpdateEventFormatRequest},
+            format::CreateEventFormatRequest,
         },
         server::{CreateServerRequest, UpdateServerRequest},
     },
@@ -62,7 +62,6 @@ use crate::routes::{
         guild::room::format::create,
         guild::room::format::list,
         guild::room::format::show,
-        guild::room::format::update,
         guild::room::format::delete,
     ),
     components(schemas(
@@ -90,7 +89,6 @@ use crate::routes::{
         UpdateServerRequest,
         CreateEventRequest,
         CreateEventFormatRequest,
-        UpdateEventFormatRequest,
         JoinEventRequest,
         JoinEventResponse,
         AssignTeamsRequest,

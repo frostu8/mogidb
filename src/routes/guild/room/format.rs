@@ -17,12 +17,12 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
-    error::{Error, NotFound},
+    error::Error,
     form::Form,
     guild::check_servers,
     json::Json,
     room::{
-        format::{EventFormatEntity, get_format},
+        format::{EventFormatEntity, get_format_in_room},
         get_room, list_room_formats,
     },
     validate::Valid,
@@ -42,22 +42,6 @@ pub struct CreateEventFormatRequest {
     #[garde(skip)]
     #[serde(default)]
     pub servers: Vec<i32>,
-}
-
-#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
-#[serde(default)]
-#[garde(context(AppState as state))]
-pub struct UpdateEventFormatRequest {
-    #[garde(length(max = 255))]
-    #[schema(max_length = 255)]
-    pub name: Option<String>,
-    #[garde(skip)]
-    pub team_mode: Option<TeamMode>,
-    /// A list of server IDs to associate with the format.
-    ///
-    /// Servers associated with a format may be selected for play.
-    #[garde(skip)]
-    pub servers: Option<Vec<i32>>,
 }
 
 #[derive(Default, Debug, Deserialize, Validate, IntoParams)]
@@ -205,92 +189,11 @@ pub async fn show(
     let mut conn = state.db.acquire().await.map_err(Error::new)?;
 
     let room = get_room(guild_id, channel_id, &mut *conn).await?;
-    let mut format = get_format(format_id, &mut *conn).await?;
-
-    // Check for room mismatch
-    if format.room_id != room.id {
-        return Err(NotFound::Format(format_id).into());
-    }
+    let mut format = get_format_in_room(room.id, format_id, &mut *conn).await?;
 
     format
         .preload_servers(&state.server_tracker, &mut *conn)
         .await?;
-
-    Ok(Json(EventFormat::from(format)))
-}
-
-/// Updates an event format.
-#[utoipa::path(
-    patch,
-    path = "/guilds/{guild_id}/rooms/{room_id}/formats/{format_id}",
-    tag = "room",
-    params(
-        ("guild_id" = i64, Path, description = "Discord guild id"),
-        ("room_id" = i64, Path, description = "Discord channel id of the room"),
-        ("format_id" = i32, Path, description = "The id of the event format"),
-    ),
-    request_body = UpdateEventFormatRequest,
-    responses(
-        (status = OK, description = "The updated format", body = EventFormat),
-        (status = BAD_REQUEST, description = "Invalid request", body = ApiError),
-        (status = NOT_FOUND, description = "Guild not found", body = ApiError),
-        (status = INTERNAL_SERVER_ERROR, description = "Internal server error", body = ApiError),
-    )
-)]
-pub async fn update(
-    Path((guild_id, channel_id, format_id)): Path<(i64, i64, i32)>,
-    State(state): State<AppState>,
-    Valid(Json(request)): Valid<Json<UpdateEventFormatRequest>>,
-) -> Result<Json<EventFormat>, Error> {
-    let mut tx = state.db.begin().await.map_err(Error::new)?;
-    let now = Utc::now();
-
-    let room = get_room(guild_id, channel_id, &mut *tx).await?;
-    let mut format = get_format(format_id, &mut *tx).await?;
-
-    // Check for room mismatch
-    if format.room_id != room.id {
-        return Err(NotFound::Format(format_id).into());
-    }
-
-    // Update settings
-    if let Some(name) = request.name {
-        format.name = name;
-    }
-    if let Some(team_mode) = request.team_mode {
-        format.team_mode = team_mode;
-    }
-    if let Some(servers) = request.servers {
-        // Add servers
-        check_servers(room.parent_id, servers.iter().copied(), &mut *tx).await?;
-        format.patch_servers(&servers[..], &mut *tx).await?;
-    }
-
-    format
-        .preload_servers(&state.server_tracker, &mut *tx)
-        .await?;
-
-    // Actually do update
-    sqlx::query(
-        r#"
-        UPDATE event_format
-        SET
-            name = $3,
-            team_mode = $4,
-            updated_at = $2
-        WHERE
-            id = $1
-        "#,
-    )
-    .bind(format.id)
-    .bind(now)
-    .bind(&format.name)
-    .bind(u8::from(format.team_mode))
-    .execute(&mut *tx)
-    .await
-    .map_err(Error::new)?;
-
-    tx.commit().await.map_err(Error::new)?;
 
     Ok(Json(EventFormat::from(format)))
 }
@@ -318,25 +221,21 @@ pub async fn delete(
     let mut tx = state.db.begin().await.map_err(Error::new)?;
 
     let room = get_room(guild_id, channel_id, &mut *tx).await?;
+    let format = get_format_in_room(room.id, format_id, &mut *tx).await?;
 
-    // Delete event format
-    let res = sqlx::query(
+    sqlx::query(
         r#"
-        DELETE FROM event_format
-        WHERE id = $1 AND room_id = $2
+        UPDATE event_format
+        SET room_id = NULL
+        WHERE id = $1
         "#,
     )
-    .bind(format_id)
-    .bind(room.id)
+    .bind(format.id)
     .execute(&mut *tx)
     .await
     .map_err(Error::new)?;
 
     tx.commit().await.map_err(Error::new)?;
 
-    if res.rows_affected() > 0 {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(NotFound::Format(format_id).into())
-    }
+    Ok(StatusCode::NO_CONTENT)
 }

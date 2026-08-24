@@ -113,10 +113,6 @@ async fn main() -> eyre::Result<()> {
                         )
                         .route(
                             "/{format_id}",
-                            patch(mogidb::routes::guild::room::format::update),
-                        )
-                        .route(
-                            "/{format_id}",
                             delete(mogidb::routes::guild::room::format::delete),
                         ),
                 ),

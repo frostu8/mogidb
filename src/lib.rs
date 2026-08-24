@@ -43,6 +43,9 @@ impl AppState {
 
         let db = SqlitePoolOptions::new().connect(database_url).await?;
 
+        // Run migrations
+        sqlx::migrate!().run(&db).await?;
+
         Ok(AppState {
             db,
             server_tracker: Arc::new(ServerTracker::new()),

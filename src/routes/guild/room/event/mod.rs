@@ -25,7 +25,10 @@ use crate::{
     event::{EventEntity, get_active_event, get_event},
     guild::get_server,
     json::Json,
-    room::{format::get_format, get_room},
+    room::{
+        format::{get_format, get_format_in_room},
+        get_room,
+    },
     server::ServerTracker,
     short_id,
     validate::Valid,
@@ -292,12 +295,10 @@ pub async fn update(
     if let Some(format_id) = request.format {
         // Find the associated format before applying, to check if its in the
         // same room.
-        let format = get_format(format_id, &mut *tx).await.or_none()?;
+        let format = get_format_in_room(event.room_id, format_id, &mut *tx)
+            .await
+            .or_none()?;
         if let Some(mut format) = format {
-            if format.room_id != event.room_id {
-                return Err(ErrorKind::NoSuchFormat(format_id).into());
-            }
-
             // Works out, apply format
             event.format_id = Some(format_id);
 

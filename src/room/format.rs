@@ -15,7 +15,7 @@ use crate::{
 #[derive(Clone, Debug, FromRow)]
 pub struct EventFormatEntity {
     pub id: i32,
-    pub room_id: i32,
+    pub room_id: Option<i32>,
     pub name: String,
     #[sqlx(try_from = "u8")]
     pub team_mode: TeamMode,
@@ -151,7 +151,7 @@ impl EventFormatEntity {
     }
 }
 
-/// Gets a format by its ID.
+/// Gets a format by its ID, regardless of room assignment.
 pub async fn get_format(
     format_id: i32,
     conn: &mut SqliteConnection,
@@ -164,6 +164,27 @@ pub async fn get_format(
         "#,
     )
     .bind(format_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(Error::new)
+    .and_then(|format| format.ok_or_else(|| NotFound::Format(format_id).into()))
+}
+
+/// Gets a format by its ID, only if it is currently assigned to the room.
+pub async fn get_format_in_room(
+    room_id: i32,
+    format_id: i32,
+    conn: &mut SqliteConnection,
+) -> Result<EventFormatEntity, Error> {
+    sqlx::query_as::<_, EventFormatEntity>(
+        r#"
+        SELECT f.*
+        FROM event_format f
+        WHERE f.id = $1 AND f.room_id = $2
+        "#,
+    )
+    .bind(format_id)
+    .bind(room_id)
     .fetch_optional(&mut *conn)
     .await
     .map_err(Error::new)
