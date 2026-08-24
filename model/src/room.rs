@@ -59,6 +59,20 @@ pub struct RoomOptions {
     /// The amount of time before the bot drops someone for inactivity, in
     /// seconds.
     pub inactivity_drop_after: u32,
+    /// The roles to allow in the queue.
+    ///
+    /// By default, this is empty and does nothing. When there are roles here,
+    /// **only** members with at least one role in this list are allowed to /c
+    /// in the room.
+    ///
+    /// When this is set, the bot will tag the roles instead of @here when
+    /// reaching queue milestones or when /ping is sent
+    pub role_whitelist: Vec<u64>,
+    /// The roles to disallow in the queue.
+    ///
+    /// By default, this is empty. Members with *any* of these roles are not
+    /// permitted to /c in the room.
+    pub role_blacklist: Vec<u64>,
 }
 
 impl RoomOptions {
@@ -78,6 +92,8 @@ impl RoomOptions {
             inactivity_drop_after: other
                 .inactivity_drop_after
                 .unwrap_or(self.inactivity_drop_after),
+            role_whitelist: other.role_whitelist.unwrap_or(self.role_whitelist),
+            role_blacklist: other.role_blacklist.unwrap_or(self.role_blacklist),
         }
     }
 }
@@ -92,6 +108,8 @@ impl Default for RoomOptions {
             decay_after: 3000,
             inactivity_warning_after: 1500,
             inactivity_drop_after: 2100,
+            role_whitelist: Vec::new(),
+            role_blacklist: Vec::new(),
         }
     }
 }
@@ -109,4 +127,6 @@ pub struct RoomOptionsOverrides {
     pub decay_after: Option<u32>,
     pub inactivity_warning_after: Option<u32>,
     pub inactivity_drop_after: Option<u32>,
+    pub role_whitelist: Option<Vec<u64>>,
+    pub role_blacklist: Option<Vec<u64>>,
 }
