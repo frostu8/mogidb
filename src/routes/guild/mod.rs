@@ -75,6 +75,12 @@ pub struct UpdateRoomSettings {
     /// The amount of time before the bot drops someone for inactivity, in seconds.
     #[garde(range(min = 0))]
     pub inactivity_drop_after: Option<u32>,
+    /// The roles to whitelist in the room.
+    #[garde(skip)]
+    pub role_whitelist: Option<Vec<u64>>,
+    /// The roles to blacklist in the room.
+    #[garde(skip)]
+    pub role_blacklist: Option<Vec<u64>>,
 }
 
 impl From<UpdateRoomSettings> for RoomOptionsOverrides {
@@ -87,6 +93,8 @@ impl From<UpdateRoomSettings> for RoomOptionsOverrides {
             decay_after: value.decay_after,
             inactivity_warning_after: value.inactivity_warning_after,
             inactivity_drop_after: value.inactivity_drop_after,
+            role_whitelist: value.role_whitelist,
+            role_blacklist: value.role_blacklist,
         }
     }
 }

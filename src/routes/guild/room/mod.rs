@@ -94,6 +94,14 @@ pub struct UpdateRoomRequest {
     #[garde(range(min = 0))]
     #[serde(deserialize_with = "deserialize_some")]
     pub inactivity_drop_after: Option<Option<u32>>,
+    /// The roles to whitelist in the room.
+    #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_some")]
+    pub role_whitelist: Option<Option<Vec<u64>>>,
+    /// The roles to blacklist in the room.
+    #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_some")]
+    pub role_blacklist: Option<Option<Vec<u64>>>,
 }
 
 impl UpdateRoomRequest {
@@ -112,6 +120,8 @@ impl UpdateRoomRequest {
             inactivity_drop_after: self
                 .inactivity_drop_after
                 .unwrap_or(other.inactivity_drop_after),
+            role_whitelist: self.role_whitelist.unwrap_or(other.role_whitelist),
+            role_blacklist: self.role_blacklist.unwrap_or(other.role_blacklist),
         }
     }
 }
