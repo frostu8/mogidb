@@ -3,16 +3,13 @@
 pub mod auth;
 pub mod config;
 pub mod docs;
+pub mod entity;
 pub mod error;
-pub mod event;
 pub mod form;
-pub mod guild;
 pub mod json;
-pub mod room;
 pub mod routes;
 pub mod server;
 pub mod short_id;
-pub mod user;
 pub mod validate;
 
 use std::sync::Arc;

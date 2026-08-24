@@ -15,9 +15,9 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState,
+    entity::user::{UserBuilder, get_user, get_user_by_discord_id},
     error::Error,
     json::Json,
-    user::{UserBuilder, get_user, get_user_by_discord_id},
     validate::Valid,
 };
 

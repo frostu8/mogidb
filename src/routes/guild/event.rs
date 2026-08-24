@@ -14,13 +14,15 @@ use utoipa::IntoParams;
 
 use crate::{
     AppState,
+    entity::{
+        event::{EventEntity, ListEventsQuery},
+        guild::get_guild,
+        user::get_user,
+    },
     error::{Error, ErrorKind, ResultExt},
-    event::{EventEntity, ListEventsQuery},
     form::Form,
-    guild::get_guild,
     json::Json,
     server::ServerTracker,
-    user::get_user,
     validate::Valid,
 };
 

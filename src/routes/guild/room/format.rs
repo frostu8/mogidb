@@ -17,14 +17,16 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
+    entity::{
+        guild::check_servers,
+        room::{
+            format::{EventFormatEntity, get_format_in_room},
+            get_room, list_room_formats,
+        },
+    },
     error::Error,
     form::Form,
-    guild::check_servers,
     json::Json,
-    room::{
-        format::{EventFormatEntity, get_format_in_room},
-        get_room, list_room_formats,
-    },
     validate::Valid,
 };
 

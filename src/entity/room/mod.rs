@@ -8,9 +8,11 @@ use mogidb_model::{
 use sqlx::{FromRow, SqliteConnection};
 
 use crate::{
+    entity::{
+        guild::{GuildEntity, get_guild},
+        room::format::EventFormatEntity,
+    },
     error::{Error, NotFound},
-    guild::{GuildEntity, get_guild},
-    room::format::EventFormatEntity,
     server::ServerTracker,
 };
 

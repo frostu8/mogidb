@@ -21,8 +21,8 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState,
+    entity::guild::GuildEntity,
     error::{Error, NotFound},
-    guild::GuildEntity,
     json::Json,
     validate::Valid,
 };

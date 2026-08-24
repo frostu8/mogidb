@@ -15,8 +15,8 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState, deserialize_some,
+    entity::guild::{get_all_servers, get_guild, get_server, marshal_server_info},
     error::{Error, ErrorKind, NotFound},
-    guild::{get_all_servers, get_guild, get_server, marshal_server_info},
     json::Json,
     server::Error as ServerError,
     validate::Valid,

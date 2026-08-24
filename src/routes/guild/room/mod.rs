@@ -21,10 +21,9 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState, deserialize_some,
+    entity::{guild::get_guild, room::get_room},
     error::{Error, NotFound},
-    guild::get_guild,
     json::Json,
-    room::get_room,
     validate::Valid,
 };
 

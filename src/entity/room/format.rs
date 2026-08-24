@@ -6,8 +6,8 @@ use mogidb_model::{
 use sqlx::{SqliteConnection, prelude::FromRow};
 
 use crate::{
+    entity::guild::marshal_server_info,
     error::{Error, ErrorKind, NotFound},
-    guild::marshal_server_info,
     server::{Error as ServerError, ServerTracker},
 };
 

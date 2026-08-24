@@ -21,14 +21,16 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState, deserialize_some,
-    error::{Error, ErrorKind, NotFound, ResultExt as _},
-    event::{EventEntity, get_active_event, get_event},
-    guild::get_server,
-    json::Json,
-    room::{
-        format::{get_format, get_format_in_room},
-        get_room,
+    entity::{
+        event::{EventEntity, get_active_event, get_event},
+        guild::get_server,
+        room::{
+            format::{get_format, get_format_in_room},
+            get_room,
+        },
     },
+    error::{Error, ErrorKind, NotFound, ResultExt as _},
+    json::Json,
     server::ServerTracker,
     short_id,
     validate::Valid,

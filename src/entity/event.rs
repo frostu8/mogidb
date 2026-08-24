@@ -18,11 +18,13 @@ use sea_query_sqlx::SqlxBinder as _;
 use sqlx::{FromRow, Row as _, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
+    entity::{
+        guild::ServerEntity,
+        room::{RoomEntity, format::EventFormatEntity, get_room},
+        user::UserEntity,
+    },
     error::{Error, NotFound},
-    guild::ServerEntity,
-    room::{RoomEntity, format::EventFormatEntity, get_room},
     server::ServerTracker,
-    user::UserEntity,
 };
 
 #[derive(Clone, Debug, FromRow)]

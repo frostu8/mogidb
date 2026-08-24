@@ -18,11 +18,13 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState, deserialize_some,
+    entity::{
+        event::{get_event, get_participants},
+        user::get_user,
+    },
     error::{Error, ErrorKind, ResultExt as _},
-    event::{get_event, get_participants},
     json::Json,
     routes::guild::room::event::aggregate_event,
-    user::get_user,
     validate::Valid,
 };
 
