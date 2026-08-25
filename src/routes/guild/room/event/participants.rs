@@ -395,7 +395,8 @@ pub async fn assign_teams(
     }
 
     // Fetch players
-    let participants = event.preload_participants(&mut *tx).await?;
+    // Make a clone of these guys, as we're going to edit them in-place
+    let mut participants: Vec<_> = event.preload_participants(&mut *tx).await?.clone();
     if let Some(players) = request.players {
         // Resolve IDs
         let mut user_ids = HashSet::<i32>::new();
@@ -412,6 +413,9 @@ pub async fn assign_teams(
                 // Check if user is playing
                 let is_playing = participants
                     .iter()
+                    // Filter out substitutes; don't allow them to be assigned
+                    // teams.
+                    .filter(|p| !p.substitute)
                     .filter_map(|p| p.user.as_ref().map(|u| &u.short_id))
                     .any(|other_short_id| short_id == *other_short_id);
                 if !is_playing {
@@ -424,6 +428,9 @@ pub async fn assign_teams(
 
         // Filter participants
         participants.retain_mut(|p| user_ids.contains(&p.user_id));
+    } else {
+        // We need to filter only substitutees
+        participants.retain_mut(|p| !p.substitute);
     }
 
     match request.balance_mode {
@@ -448,6 +455,17 @@ pub async fn assign_teams(
 
     // God's work has been done, push back to database
     for participant in participants.iter() {
+        // Also update the participant in the returned embed
+        // We could just requery but I'm lazy and participant nos are few
+        // enough to where the search time is negligable.
+        if let Some(embedded) = event
+            .participants
+            .as_mut()
+            .and_then(|ps| ps.iter_mut().find(|p| p.id == participant.id))
+        {
+            embedded.team_number = participant.team_number
+        }
+
         sqlx::query("UPDATE event_participant SET team_number = $1 WHERE id = $2")
             .bind(participant.team_number)
             .bind(participant.id)
