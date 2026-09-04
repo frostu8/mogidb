@@ -38,6 +38,7 @@ pub struct EventEntity {
     pub rejected: bool,
     pub format_id: Option<i32>,
     pub server_id: Option<i32>,
+    pub gathered_at: Option<DateTime<Utc>>,
     pub inserted_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
@@ -145,6 +146,7 @@ impl TryFrom<EventEntity> for Event {
                 .transpose()
                 .map_err(Error::new)?,
             created_at: value.inserted_at,
+            gathered_at: value.gathered_at,
         })
     }
 }

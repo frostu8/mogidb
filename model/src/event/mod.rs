@@ -65,6 +65,8 @@ pub struct Event {
     pub room: Option<Room>,
     /// When the event was created.
     pub created_at: DateTime<Utc>,
+    /// When the event gathered.
+    pub gathered_at: Option<DateTime<Utc>>,
 }
 
 /// An event participant.

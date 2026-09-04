@@ -136,6 +136,7 @@ pub async fn create(
                 rejected: false,
                 format_id: None,
                 server_id: None,
+                gathered_at: None,
                 inserted_at: now,
                 updated_at: now,
                 participants: Some(Vec::new()),

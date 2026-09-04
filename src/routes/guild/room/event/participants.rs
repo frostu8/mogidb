@@ -202,7 +202,7 @@ pub async fn join(
     let res = sqlx::query(
         r#"
         UPDATE event
-        SET updated_at = $1, status = $2
+        SET gathered_at = $1, updated_at = $1, status = $2
         WHERE
             id = $3
             AND status = 0
